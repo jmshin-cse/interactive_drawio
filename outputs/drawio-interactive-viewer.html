@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Draw.io Interactive Flowchart Viewer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1a2e; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* Top Bar */
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 10px 20px; background: #16213e; border-bottom: 1px solid #0f3460; flex-shrink: 0; flex-wrap: wrap; }
+  .topbar h1 { font-size: 16px; color: #e94560; margin-right: 12px; white-space: nowrap; }
+  .topbar button { padding: 7px 16px; border: 1px solid #0f3460; background: #1a1a2e; color: #e0e0e0; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.2s; white-space: nowrap; }
+  .topbar button:hover { background: #0f3460; }
+  .topbar button.active { background: #e94560; border-color: #e94560; color: #fff; }
+  .mode-group { display: flex; gap: 4px; background: #0d1b3e; border-radius: 8px; padding: 3px; }
+  .search-box { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+  .search-box input { padding: 6px 12px; border: 1px solid #0f3460; background: #1a1a2e; color: #e0e0e0; border-radius: 6px; font-size: 13px; width: 200px; }
+  .search-box input::placeholder { color: #666; }
+  .depth-control { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  .depth-control button { padding: 4px 10px; font-size: 14px; font-weight: bold; }
+  .depth-label { color: #aaa; min-width: 80px; text-align: center; }
+
+  /* Upload area */
+  .upload-area { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 20px; padding: 40px; }
+  .upload-area.hidden { display: none; }
+  .drop-zone { width: 600px; max-width: 90%; height: 200px; border: 2px dashed #0f3460; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; cursor: pointer; transition: all 0.3s; }
+  .drop-zone:hover, .drop-zone.dragover { border-color: #e94560; background: rgba(233,69,96,0.05); }
+  .drop-zone p { font-size: 15px; color: #888; }
+  .drop-zone .icon { font-size: 48px; }
+  .or-text { color: #666; font-size: 14px; }
+  textarea.xml-input { width: 600px; max-width: 90%; height: 200px; background: #16213e; border: 1px solid #0f3460; border-radius: 12px; color: #e0e0e0; padding: 16px; font-family: 'Fira Code', monospace; font-size: 13px; resize: vertical; }
+  .load-btn { padding: 10px 32px; background: #e94560; border: none; color: #fff; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 600; }
+  .load-btn:hover { background: #c73e54; }
+
+  /* Canvas area */
+  .canvas-container { flex: 1; position: relative; overflow: hidden; display: none; }
+  .canvas-container.visible { display: block; }
+  .canvas-container svg { width: 100%; height: 100%; }
+
+  /* Info panel */
+  .info-panel { position: absolute; top: 10px; right: 10px; background: rgba(22,33,62,0.95); border: 1px solid #0f3460; border-radius: 10px; padding: 14px 18px; max-width: 320px; font-size: 13px; line-height: 1.6; display: none; z-index: 100; backdrop-filter: blur(8px); }
+  .info-panel.visible { display: block; }
+  .info-panel h3 { color: #e94560; margin-bottom: 8px; font-size: 14px; }
+  .info-panel .stat { color: #aaa; }
+  .info-panel .stat span { color: #e0e0e0; font-weight: 600; }
+  .info-panel .close-btn { position: absolute; top: 6px; right: 10px; background: none; border: none; color: #888; cursor: pointer; font-size: 16px; }
+
+  /* Minimap */
+  .minimap { position: absolute; bottom: 10px; right: 10px; width: 180px; height: 130px; background: rgba(22,33,62,0.9); border: 1px solid #0f3460; border-radius: 8px; overflow: hidden; z-index: 90; cursor: crosshair; }
+  .minimap svg { width: 100%; height: 100%; }
+  .minimap .viewport-rect { fill: rgba(233,69,96,0.15); stroke: #e94560; stroke-width: 1.5; }
+
+  /* Legend */
+  .legend { position: absolute; bottom: 10px; left: 10px; background: rgba(22,33,62,0.95); border: 1px solid #0f3460; border-radius: 8px; padding: 10px 14px; font-size: 12px; z-index: 90; }
+  .legend-item { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+
+  /* Tooltip */
+  .tooltip { position: absolute; background: rgba(22,33,62,0.95); border: 1px solid #e94560; border-radius: 6px; padding: 8px 12px; font-size: 12px; pointer-events: none; z-index: 200; display: none; white-space: nowrap; }
+
+  /* Animations */
+  @keyframes flowDot { 0% { offset-distance: 0%; } 100% { offset-distance: 100%; } }
+  @keyframes pulse { 0%,100% { opacity: 0.6; } 50% { opacity: 1; } }
+  .flow-dot { animation: flowDot 2s linear infinite; }
+  .pulse-glow { animation: pulse 1.5s ease-in-out infinite; }
+
+  /* Node/Edge states */
+  .node-group { cursor: pointer; transition: opacity 0.3s, filter 0.3s; }
+  .edge-group { transition: opacity 0.3s, filter 0.3s; }
+  .dimmed { opacity: 0.08 !important; filter: grayscale(1); }
+  .highlighted-node rect, .highlighted-node ellipse, .highlighted-node polygon, .highlighted-node path {
+    filter: drop-shadow(0 0 8px currentColor); stroke-width: 3;
+  }
+  .highlighted-edge line, .highlighted-edge polyline, .highlighted-edge path {
+    filter: drop-shadow(0 0 6px currentColor); stroke-width: 3;
+  }
+  .search-match rect, .search-match ellipse, .search-match polygon, .search-match path {
+    stroke: #ffd700 !important; stroke-width: 3; filter: drop-shadow(0 0 10px #ffd700);
+  }
+</style>
+</head>
+<body>
+
+<!-- Upload Area -->
+<div class="upload-area" id="uploadArea">
+  <h1 style="font-size:28px; color:#e94560; margin-bottom:8px;">Draw.io Interactive Viewer</h1>
+  <p style="color:#888; margin-bottom:20px;">draw.io XML 파일을 업로드하거나 XML 코드를 붙여넣으세요</p>
+  <div class="drop-zone" id="dropZone">
+    <div class="icon">📂</div>
+    <p>.drawio / .xml 파일을 드래그 & 드롭</p>
+    <p style="font-size:12px;">또는 클릭하여 파일 선택</p>
+    <input type="file" id="fileInput" accept=".drawio,.xml,.drawio.xml" style="display:none">
+  </div>
+  <div class="or-text">— 또는 XML 직접 입력 —</div>
+  <textarea class="xml-input" id="xmlInput" placeholder="<mxGraphModel>...</mxGraphModel> XML을 여기에 붙여넣으세요"></textarea>
+  <button class="load-btn" id="loadBtn">불러오기</button>
+</div>
+
+<!-- Main Viewer -->
+<div class="topbar" id="topbar" style="display:none">
+  <h1>📊 Draw.io Viewer</h1>
+  <div class="mode-group">
+    <button id="modeHighlight" class="active" onclick="setMode('highlight')" title="클릭한 노드의 직접 연결을 하이라이트">💡 연결 하이라이트</button>
+    <button id="modeTrace" onclick="setMode('trace')" title="상류/하류 전체 경로를 색상으로 추적">🔍 경로 추적</button>
+    <button id="modeFocus" onclick="setMode('focus')" title="연결되지 않은 요소를 숨기는 포커스 모드">🎯 포커스 모드</button>
+  </div>
+  <div class="depth-control" id="depthControl" style="display:none;">
+    <button onclick="changeDepth(-1)">−</button>
+    <span class="depth-label" id="depthLabel">깊이: 1</span>
+    <button onclick="changeDepth(1)">+</button>
+  </div>
+  <div class="search-box">
+    <input type="text" id="searchInput" placeholder="🔎 노드 검색..." oninput="onSearch(this.value)">
+  </div>
+  <button onclick="resetView()" title="초기 상태로 되돌리기">↺ 리셋</button>
+  <button onclick="showUpload()" title="다른 파일 불러오기">📂 파일 변경</button>
+</div>
+
+<div class="canvas-container" id="canvasContainer">
+  <svg id="mainSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div class="minimap" id="minimap">
+    <svg id="minimapSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+  </div>
+  <div class="legend" id="legend"></div>
+  <div class="info-panel" id="infoPanel">
+    <button class="close-btn" onclick="closeInfoPanel()">✕</button>
+    <h3 id="infoPanelTitle"></h3>
+    <div id="infoPanelContent"></div>
+  </div>
+  <div class="tooltip" id="tooltip"></div>
+</div>
+
+<script>
+// ============================================================
+// Global State
+// ============================================================
+let graph = { nodes: {}, edges: [], nodeList: [], edgeList: [] };
+let currentMode = 'highlight';
+let selectedNodeId = null;
+let focusDepth = 1;
+let panZoom = { x: 0, y: 0, scale: 1 };
+let isPanning = false;
+let panStart = { x: 0, y: 0 };
+let svgBounds = { minX: 0, minY: 0, maxX: 800, maxY: 600 };
+
+// ============================================================
+// File Loading
+// ============================================================
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) readFile(file);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) readFile(e.target.files[0]); });
+document.getElementById('loadBtn').addEventListener('click', () => {
+  const xml = document.getElementById('xmlInput').value.trim();
+  if (xml) loadDiagram(xml);
+});
+
+function readFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('xmlInput').value = e.target.result;
+    loadDiagram(e.target.result);
+  };
+  reader.readAsText(file);
+}
+
+function showUpload() {
+  document.getElementById('uploadArea').classList.remove('hidden');
+  document.getElementById('topbar').style.display = 'none';
+  document.getElementById('canvasContainer').classList.remove('visible');
+}
+
+// ============================================================
+// XML Parsing
+// ============================================================
+function loadDiagram(xmlStr) {
+  // Handle compressed draw.io format
+  let xml = xmlStr.trim();
+  // Some drawio files have the XML inside a <diagram> tag with base64/deflate encoding
+  // Try to parse as-is first
+  const parser = new DOMParser();
+  let doc = parser.parseFromString(xml, 'text/xml');
+
+  // Check for diagram element with encoded content
+  const diagramEl = doc.querySelector('diagram');
+  if (diagramEl && !doc.querySelector('mxGraphModel root')) {
+    const content = diagramEl.textContent.trim();
+    if (content && !content.includes('<')) {
+      try {
+        const decoded = atob(content);
+        const inflated = pako_inflate(decoded);
+        const decodedXml = decodeURIComponent(inflated);
+        doc = parser.parseFromString(decodedXml, 'text/xml');
+      } catch(e) {
+        // Try URL-encoded
+        try {
+          const decoded = atob(content);
+          doc = parser.parseFromString(decoded, 'text/xml');
+        } catch(e2) { /* use as-is */ }
+      }
+    }
+  }
+
+  // Also handle mxfile wrapper
+  const mxGraphModel = doc.querySelector('mxGraphModel');
+  if (!mxGraphModel) {
+    alert('유효한 draw.io XML이 아닙니다. mxGraphModel을 찾을 수 없습니다.');
+    return;
+  }
+
+  parseGraph(mxGraphModel);
+  renderDiagram();
+
+  document.getElementById('uploadArea').classList.add('hidden');
+  document.getElementById('topbar').style.display = 'flex';
+  document.getElementById('canvasContainer').classList.add('visible');
+}
+
+function pako_inflate(binaryStr) {
+  // Simple inflate for compressed drawio — fallback: return as-is
+  // For full support, include pako library. Here we handle uncompressed base64.
+  return binaryStr;
+}
+
+function parseGraph(mxGraphModel) {
+  graph = { nodes: {}, edges: [], nodeList: [], edgeList: [] };
+  const cells = mxGraphModel.querySelectorAll('mxCell');
+
+  cells.forEach(cell => {
+    const id = cell.getAttribute('id');
+    const style = cell.getAttribute('style') || '';
+    const value = cell.getAttribute('value') || '';
+    const vertex = cell.getAttribute('vertex');
+    const edge = cell.getAttribute('edge');
+    const source = cell.getAttribute('source');
+    const target = cell.getAttribute('target');
+    const parent = cell.getAttribute('parent');
+    const geo = cell.querySelector('mxGeometry');
+
+    if (vertex === '1') {
+      const x = geo ? parseFloat(geo.getAttribute('x')) || 0 : 0;
+      const y = geo ? parseFloat(geo.getAttribute('y')) || 0 : 0;
+      const w = geo ? parseFloat(geo.getAttribute('width')) || 120 : 120;
+      const h = geo ? parseFloat(geo.getAttribute('height')) || 60 : 60;
+
+      graph.nodes[id] = {
+        id, value: stripHtml(value), rawValue: value, style: parseStyle(style),
+        rawStyle: style, x, y, w, h, parent,
+        incoming: [], outgoing: [], connectedEdges: []
+      };
+      graph.nodeList.push(id);
+    } else if (edge === '1') {
+      const points = [];
+      if (geo) {
+        const arr = geo.querySelector('Array');
+        if (arr) {
+          arr.querySelectorAll('mxPoint').forEach(pt => {
+            points.push({ x: parseFloat(pt.getAttribute('x')) || 0, y: parseFloat(pt.getAttribute('y')) || 0 });
+          });
+        }
+        // Source/target points
+        const srcPt = geo.querySelector('mxPoint[as="sourcePoint"]');
+        const tgtPt = geo.querySelector('mxPoint[as="targetPoint"]');
+        if (srcPt) points.unshift({ x: parseFloat(srcPt.getAttribute('x'))||0, y: parseFloat(srcPt.getAttribute('y'))||0, type:'source' });
+        if (tgtPt) points.push({ x: parseFloat(tgtPt.getAttribute('x'))||0, y: parseFloat(tgtPt.getAttribute('y'))||0, type:'target' });
+      }
+      const edgeObj = {
+        id, source, target, style: parseStyle(style), rawStyle: style,
+        value: stripHtml(value), points, parent
+      };
+      graph.edges.push(edgeObj);
+      graph.edgeList.push(id);
+
+      if (source && graph.nodes[source]) {
+        graph.nodes[source].outgoing.push(target);
+        graph.nodes[source].connectedEdges.push(id);
+      }
+      if (target && graph.nodes[target]) {
+        graph.nodes[target].incoming.push(source);
+        graph.nodes[target].connectedEdges.push(id);
+      }
+    }
+  });
+
+  // Second pass: link edges to nodes that were parsed after the edge
+  graph.edges.forEach(e => {
+    if (e.source && graph.nodes[e.source] && !graph.nodes[e.source].outgoing.includes(e.target)) {
+      graph.nodes[e.source].outgoing.push(e.target);
+      graph.nodes[e.source].connectedEdges.push(e.id);
+    }
+    if (e.target && graph.nodes[e.target] && !graph.nodes[e.target].incoming.includes(e.source)) {
+      graph.nodes[e.target].incoming.push(e.source);
+      graph.nodes[e.target].connectedEdges.push(e.id);
+    }
+  });
+}
+
+function parseStyle(styleStr) {
+  const s = {};
+  if (!styleStr) return s;
+  const parts = styleStr.split(';').filter(Boolean);
+  parts.forEach(part => {
+    const eq = part.indexOf('=');
+    if (eq > 0) {
+      s[part.substring(0, eq).trim()] = part.substring(eq + 1).trim();
+    } else {
+      s._shape = part.trim();
+    }
+  });
+  return s;
+}
+
+function stripHtml(html) {
+  if (!html) return '';
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  return div.textContent || div.innerText || '';
+}
+
+// ============================================================
+// Rendering
+// ============================================================
+function renderDiagram() {
+  const svg = document.getElementById('mainSvg');
+  svg.innerHTML = '';
+
+  // Calculate bounds
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  Object.values(graph.nodes).forEach(n => {
+    minX = Math.min(minX, n.x);
+    minY = Math.min(minY, n.y);
+    maxX = Math.max(maxX, n.x + n.w);
+    maxY = Math.max(maxY, n.y + n.h);
+  });
+  graph.edges.forEach(e => {
+    e.points.forEach(p => {
+      minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y);
+    });
+  });
+
+  const pad = 60;
+  minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+  if (!isFinite(minX)) { minX = 0; minY = 0; maxX = 800; maxY = 600; }
+  svgBounds = { minX, minY, maxX, maxY };
+
+  const w = maxX - minX;
+  const h = maxY - minY;
+  svg.setAttribute('viewBox', `${minX} ${minY} ${w} ${h}`);
+
+  // Defs for markers and filters
+  const defs = createSvgEl('defs');
+  // Arrowhead
+  const marker = createSvgEl('marker', { id: 'arrowhead', markerWidth: 10, markerHeight: 7, refX: 9, refY: 3.5, orient: 'auto' });
+  marker.appendChild(createSvgEl('polygon', { points: '0 0, 10 3.5, 0 7', fill: '#999' }));
+  defs.appendChild(marker);
+
+  // Colored arrowheads
+  ['#4fc3f7', '#ef5350', '#e94560', '#ffd700'].forEach(color => {
+    const m = createSvgEl('marker', { id: 'arrow-' + color.replace('#',''), markerWidth: 10, markerHeight: 7, refX: 9, refY: 3.5, orient: 'auto' });
+    m.appendChild(createSvgEl('polygon', { points: '0 0, 10 3.5, 0 7', fill: color }));
+    defs.appendChild(m);
+  });
+
+  // Glow filter
+  const glow = createSvgEl('filter', { id: 'glow', x: '-50%', y: '-50%', width: '200%', height: '200%' });
+  const blur = createSvgEl('feGaussianBlur', { stdDeviation: 4, result: 'coloredBlur' });
+  glow.appendChild(blur);
+  const merge = createSvgEl('feMerge');
+  merge.appendChild(createSvgEl('feMergeNode', { in: 'coloredBlur' }));
+  merge.appendChild(createSvgEl('feMergeNode', { in: 'SourceGraphic' }));
+  glow.appendChild(merge);
+  defs.appendChild(glow);
+  svg.appendChild(defs);
+
+  // Render edges first (behind nodes)
+  const edgeLayer = createSvgEl('g', { id: 'edgeLayer' });
+  graph.edges.forEach(e => {
+    const g = createSvgEl('g', { class: 'edge-group', 'data-id': e.id, 'data-source': e.source || '', 'data-target': e.target || '' });
+    const path = buildEdgePath(e);
+    const edgeColor = e.style.strokeColor || '#999';
+    const strokeWidth = parseFloat(e.style.strokeWidth) || 1.5;
+    const dashed = e.style.dashed === '1';
+
+    path.setAttribute('stroke', edgeColor);
+    path.setAttribute('stroke-width', strokeWidth);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('marker-end', 'url(#arrowhead)');
+    if (dashed) path.setAttribute('stroke-dasharray', '8,4');
+    g.appendChild(path);
+
+    // Edge label
+    if (e.value) {
+      const midPt = getEdgeMidpoint(e);
+      const text = createSvgEl('text', { x: midPt.x, y: midPt.y - 6, 'text-anchor': 'middle', fill: e.style.fontColor || '#ccc', 'font-size': e.style.fontSize || 11 });
+      text.textContent = e.value;
+      // Background for readability
+      const bg = createSvgEl('rect', { x: midPt.x - e.value.length * 3.5 - 4, y: midPt.y - 18, width: e.value.length * 7 + 8, height: 16, rx: 3, fill: 'rgba(26,26,46,0.85)' });
+      g.appendChild(bg);
+      g.appendChild(text);
+    }
+    edgeLayer.appendChild(g);
+  });
+  svg.appendChild(edgeLayer);
+
+  // Render nodes
+  const nodeLayer = createSvgEl('g', { id: 'nodeLayer' });
+  Object.values(graph.nodes).forEach(n => {
+    const g = createSvgEl('g', { class: 'node-group', 'data-id': n.id, transform: `translate(${n.x},${n.y})` });
+    g.addEventListener('click', e => { e.stopPropagation(); onNodeClick(n.id); });
+    g.addEventListener('mouseenter', e => showTooltip(e, n));
+    g.addEventListener('mouseleave', hideTooltip);
+
+    const shape = getShapeType(n.style);
+    const fillColor = n.style.fillColor || '#16213e';
+    const strokeColor = n.style.strokeColor || '#0f3460';
+    const strokeWidth = parseFloat(n.style.strokeWidth) || 1.5;
+    const rounded = n.style.rounded === '1';
+    const opacity = n.style.opacity ? parseFloat(n.style.opacity)/100 : 1;
+
+    let shapeEl;
+    switch(shape) {
+      case 'ellipse':
+        shapeEl = createSvgEl('ellipse', { cx: n.w/2, cy: n.h/2, rx: n.w/2, ry: n.h/2 });
+        break;
+      case 'rhombus':
+        shapeEl = createSvgEl('polygon', { points: `${n.w/2},0 ${n.w},${n.h/2} ${n.w/2},${n.h} 0,${n.h/2}` });
+        break;
+      case 'parallelogram':
+        const off = n.w * 0.15;
+        shapeEl = createSvgEl('polygon', { points: `${off},0 ${n.w},0 ${n.w-off},${n.h} 0,${n.h}` });
+        break;
+      case 'hexagon':
+        const hx = n.w * 0.15;
+        shapeEl = createSvgEl('polygon', { points: `${hx},0 ${n.w-hx},0 ${n.w},${n.h/2} ${n.w-hx},${n.h} ${hx},${n.h} 0,${n.h/2}` });
+        break;
+      case 'cylinder':
+        // Simplified cylinder as rect with rounded top/bottom
+        shapeEl = createSvgEl('rect', { x:0, y:0, width: n.w, height: n.h, rx: n.w/4 });
+        break;
+      case 'triangle':
+        shapeEl = createSvgEl('polygon', { points: `${n.w/2},0 ${n.w},${n.h} 0,${n.h}` });
+        break;
+      default: // rectangle
+        shapeEl = createSvgEl('rect', { x: 0, y: 0, width: n.w, height: n.h, rx: rounded ? 10 : (n.style.arcSize ? parseFloat(n.style.arcSize)/2 : 0) });
+    }
+
+    shapeEl.setAttribute('fill', fillColor === 'none' ? 'transparent' : fillColor);
+    shapeEl.setAttribute('stroke', strokeColor === 'none' ? 'transparent' : strokeColor);
+    shapeEl.setAttribute('stroke-width', strokeWidth);
+    if (opacity < 1) shapeEl.setAttribute('opacity', opacity);
+    // Store original colors for reset
+    shapeEl.dataset.origFill = fillColor;
+    shapeEl.dataset.origStroke = strokeColor;
+    g.appendChild(shapeEl);
+
+    // Text
+    if (n.value) {
+      const fontSize = parseFloat(n.style.fontSize) || 12;
+      const fontColor = n.style.fontColor || '#e0e0e0';
+      const fontBold = (n.style.fontStyle & 1) ? 'bold' : 'normal';
+      const lines = wrapText(n.value, n.w - 12, fontSize);
+      const totalH = lines.length * (fontSize + 3);
+      const startY = (n.h - totalH) / 2 + fontSize;
+
+      lines.forEach((line, i) => {
+        const text = createSvgEl('text', {
+          x: n.w / 2, y: startY + i * (fontSize + 3),
+          'text-anchor': 'middle', fill: fontColor,
+          'font-size': fontSize, 'font-weight': fontBold,
+          'pointer-events': 'none'
+        });
+        text.textContent = line;
+        g.appendChild(text);
+      });
+    }
+    nodeLayer.appendChild(g);
+  });
+  svg.appendChild(nodeLayer);
+
+  // Flow dot layer (for animated dots)
+  const flowLayer = createSvgEl('g', { id: 'flowLayer' });
+  svg.appendChild(flowLayer);
+
+  // Pan & Zoom
+  initPanZoom(svg);
+  fitView(svg);
+  renderMinimap();
+  updateLegend();
+}
+
+function getShapeType(style) {
+  const s = style._shape || '';
+  if (s.includes('ellipse') || style.shape === 'mxgraph.flowchart.start_2' || style.shape === 'mxgraph.flowchart.terminator') return 'ellipse';
+  if (s.includes('rhombus') || style.shape === 'mxgraph.flowchart.decision') return 'rhombus';
+  if (s.includes('parallelogram')) return 'parallelogram';
+  if (s.includes('hexagon')) return 'hexagon';
+  if (s.includes('cylinder') || style.shape === 'cylinder' || style.shape === 'cylinder3') return 'cylinder';
+  if (s.includes('triangle')) return 'triangle';
+  return 'rect';
+}
+
+function buildEdgePath(edge) {
+  const srcNode = graph.nodes[edge.source];
+  const tgtNode = graph.nodes[edge.target];
+  const pts = [];
+
+  if (srcNode) {
+    pts.push({ x: srcNode.x + srcNode.w / 2, y: srcNode.y + srcNode.h / 2 });
+  }
+  edge.points.forEach(p => pts.push(p));
+  if (tgtNode) {
+    pts.push({ x: tgtNode.x + tgtNode.w / 2, y: tgtNode.y + tgtNode.h / 2 });
+  }
+
+  // Clip to node boundaries
+  if (pts.length >= 2) {
+    if (srcNode) pts[0] = clipToNode(srcNode, pts[1]);
+    if (tgtNode) pts[pts.length-1] = clipToNode(tgtNode, pts[pts.length-2]);
+  }
+
+  if (pts.length < 2) {
+    // Fallback: use explicit source/target points from geometry
+    edge.points.forEach(p => pts.push(p));
+    if (pts.length < 2) return createSvgEl('path', { d: 'M0,0' });
+  }
+
+  // Build smooth or straight path
+  const edgeStyle = edge.style.edgeStyle || edge.rawStyle || '';
+  const curved = edgeStyle.includes('curved') || edge.style.curved === '1';
+
+  let d;
+  if (curved && pts.length > 2) {
+    d = `M${pts[0].x},${pts[0].y}`;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const cp = pts[i];
+      const next = pts[i + 1];
+      const mx = (cp.x + next.x) / 2;
+      const my = (cp.y + next.y) / 2;
+      d += ` Q${cp.x},${cp.y} ${mx},${my}`;
+    }
+    d += ` L${pts[pts.length-1].x},${pts[pts.length-1].y}`;
+  } else if (edgeStyle.includes('orthogonalEdgeStyle') || edgeStyle.includes('elbowEdgeStyle')) {
+    d = buildOrthogonalPath(pts);
+  } else {
+    d = `M${pts[0].x},${pts[0].y}`;
+    for (let i = 1; i < pts.length; i++) d += ` L${pts[i].x},${pts[i].y}`;
+  }
+
+  return createSvgEl('path', { d, class: 'edge-path' });
+}
+
+function buildOrthogonalPath(pts) {
+  if (pts.length < 2) return `M0,0`;
+  let d = `M${pts[0].x},${pts[0].y}`;
+  for (let i = 1; i < pts.length; i++) {
+    d += ` L${pts[i].x},${pts[i].y}`;
+  }
+  return d;
+}
+
+function clipToNode(node, target) {
+  const cx = node.x + node.w / 2, cy = node.y + node.h / 2;
+  const dx = target.x - cx, dy = target.y - cy;
+  if (dx === 0 && dy === 0) return { x: cx, y: cy };
+
+  const hw = node.w / 2, hh = node.h / 2;
+  const absDx = Math.abs(dx), absDy = Math.abs(dy);
+  let t;
+  if (absDx / hw > absDy / hh) {
+    t = hw / absDx;
+  } else {
+    t = hh / absDy;
+  }
+  return { x: cx + dx * t, y: cy + dy * t };
+}
+
+function getEdgeMidpoint(edge) {
+  const srcNode = graph.nodes[edge.source];
+  const tgtNode = graph.nodes[edge.target];
+  if (edge.points.length > 0) {
+    const mid = edge.points[Math.floor(edge.points.length / 2)];
+    return mid;
+  }
+  if (srcNode && tgtNode) {
+    return { x: (srcNode.x + srcNode.w/2 + tgtNode.x + tgtNode.w/2) / 2, y: (srcNode.y + srcNode.h/2 + tgtNode.y + tgtNode.h/2) / 2 };
+  }
+  return { x: 0, y: 0 };
+}
+
+function wrapText(text, maxWidth, fontSize) {
+  const charsPerLine = Math.max(Math.floor(maxWidth / (fontSize * 0.55)), 4);
+  if (text.length <= charsPerLine) return [text];
+  const words = text.split(/\s+/);
+  const lines = [];
+  let cur = '';
+  words.forEach(word => {
+    if ((cur + ' ' + word).trim().length > charsPerLine && cur) {
+      lines.push(cur.trim());
+      cur = word;
+    } else {
+      cur += ' ' + word;
+    }
+  });
+  if (cur.trim()) lines.push(cur.trim());
+  return lines.slice(0, 4); // max 4 lines
+}
+
+function createSvgEl(tag, attrs = {}) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+  return el;
+}
+
+// ============================================================
+// Pan & Zoom
+// ============================================================
+function initPanZoom(svg) {
+  svg.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = svg.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    const newScale = Math.max(0.1, Math.min(10, panZoom.scale * delta));
+
+    // Adjust pan to zoom toward cursor
+    const vb = svg.viewBox.baseVal;
+    const svgX = vb.x + (mx / rect.width) * vb.width;
+    const svgY = vb.y + (my / rect.height) * vb.height;
+
+    panZoom.scale = newScale;
+    applyViewBox(svg, svgX, svgY, delta);
+    updateMinimapViewport();
+  });
+
+  svg.addEventListener('mousedown', e => {
+    if (e.target === svg || e.target.closest('#edgeLayer') || (e.target.closest('.node-group') === null && e.target.closest('.edge-group') === null)) {
+      isPanning = true;
+      panStart = { x: e.clientX, y: e.clientY };
+      svg.style.cursor = 'grabbing';
+    }
+  });
+  svg.addEventListener('mousemove', e => {
+    if (!isPanning) return;
+    const vb = svg.viewBox.baseVal;
+    const rect = svg.getBoundingClientRect();
+    const dx = (e.clientX - panStart.x) * (vb.width / rect.width);
+    const dy = (e.clientY - panStart.y) * (vb.height / rect.height);
+    vb.x -= dx; vb.y -= dy;
+    panStart = { x: e.clientX, y: e.clientY };
+    updateMinimapViewport();
+  });
+  svg.addEventListener('mouseup', () => { isPanning = false; svg.style.cursor = 'default'; });
+  svg.addEventListener('mouseleave', () => { isPanning = false; svg.style.cursor = 'default'; });
+
+  // Click on empty space to deselect
+  svg.addEventListener('click', e => {
+    if (e.target === svg || e.target.tagName === 'svg') resetHighlights();
+  });
+}
+
+function applyViewBox(svg, pivotX, pivotY, scaleFactor) {
+  const vb = svg.viewBox.baseVal;
+  const newW = vb.width / scaleFactor;
+  const newH = vb.height / scaleFactor;
+  vb.x = pivotX - (pivotX - vb.x) / scaleFactor;
+  vb.y = pivotY - (pivotY - vb.y) / scaleFactor;
+  vb.width = newW;
+  vb.height = newH;
+}
+
+function fitView() {
+  const svg = document.getElementById('mainSvg');
+  const { minX, minY, maxX, maxY } = svgBounds;
+  svg.setAttribute('viewBox', `${minX} ${minY} ${maxX - minX} ${maxY - minY}`);
+  panZoom.scale = 1;
+}
+
+function resetView() {
+  fitView();
+  resetHighlights();
+  updateMinimapViewport();
+}
+
+// ============================================================
+// Minimap
+// ============================================================
+function renderMinimap() {
+  const mmSvg = document.getElementById('minimapSvg');
+  mmSvg.innerHTML = '';
+  const { minX, minY, maxX, maxY } = svgBounds;
+  mmSvg.setAttribute('viewBox', `${minX} ${minY} ${maxX-minX} ${maxY-minY}`);
+
+  // Draw simplified nodes
+  Object.values(graph.nodes).forEach(n => {
+    const r = createSvgEl('rect', { x: n.x, y: n.y, width: n.w, height: n.h, fill: n.style.fillColor || '#16213e', stroke: n.style.strokeColor || '#0f3460', 'stroke-width': 2 });
+    mmSvg.appendChild(r);
+  });
+
+  // Viewport rect
+  const vp = createSvgEl('rect', { class: 'viewport-rect', id: 'mmViewport' });
+  mmSvg.appendChild(vp);
+  updateMinimapViewport();
+
+  // Click on minimap to navigate
+  document.getElementById('minimap').addEventListener('click', e => {
+    const rect = mmSvg.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) / rect.width;
+    const my = (e.clientY - rect.top) / rect.height;
+    const svg = document.getElementById('mainSvg');
+    const vb = svg.viewBox.baseVal;
+    vb.x = minX + mx * (maxX - minX) - vb.width / 2;
+    vb.y = minY + my * (maxY - minY) - vb.height / 2;
+    updateMinimapViewport();
+  });
+}
+
+function updateMinimapViewport() {
+  const svg = document.getElementById('mainSvg');
+  const vb = svg.viewBox.baseVal;
+  const vp = document.getElementById('mmViewport');
+  if (vp) {
+    vp.setAttribute('x', vb.x); vp.setAttribute('y', vb.y);
+    vp.setAttribute('width', vb.width); vp.setAttribute('height', vb.height);
+  }
+}
+
+// ============================================================
+// Interaction Modes
+// ============================================================
+function setMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-group button').forEach(b => b.classList.remove('active'));
+  document.getElementById('mode' + mode.charAt(0).toUpperCase() + mode.slice(1)).classList.add('active');
+  document.getElementById('depthControl').style.display = mode === 'focus' ? 'flex' : 'none';
+  resetHighlights();
+  if (selectedNodeId) onNodeClick(selectedNodeId);
+}
+
+function onNodeClick(nodeId) {
+  selectedNodeId = nodeId;
+  resetHighlights();
+
+  switch(currentMode) {
+    case 'highlight': modeHighlightClick(nodeId); break;
+    case 'trace': modeTraceClick(nodeId); break;
+    case 'focus': modeFocusClick(nodeId); break;
+  }
+  showInfoPanel(nodeId);
+}
+
+// --- Mode 1: Connection Highlight ---
+function modeHighlightClick(nodeId) {
+  const node = graph.nodes[nodeId];
+  if (!node) return;
+
+  const connectedNodes = new Set([nodeId]);
+  const connectedEdges = new Set();
+
+  graph.edges.forEach(e => {
+    if (e.source === nodeId || e.target === nodeId) {
+      connectedEdges.add(e.id);
+      if (e.source) connectedNodes.add(e.source);
+      if (e.target) connectedNodes.add(e.target);
+    }
+  });
+
+  // Dim everything
+  document.querySelectorAll('.node-group').forEach(g => {
+    if (!connectedNodes.has(g.dataset.id)) g.classList.add('dimmed');
+    else { g.classList.add('highlighted-node'); g.style.color = '#e94560'; }
+  });
+  document.querySelectorAll('.edge-group').forEach(g => {
+    if (!connectedEdges.has(g.dataset.id)) g.classList.add('dimmed');
+    else {
+      g.classList.add('highlighted-edge');
+      const path = g.querySelector('.edge-path');
+      if (path) {
+        path.setAttribute('stroke', '#e94560');
+        path.setAttribute('stroke-width', 3);
+        path.setAttribute('marker-end', 'url(#arrow-e94560)');
+      }
+    }
+  });
+
+  // Pulse effect on selected node
+  const selGroup = document.querySelector(`.node-group[data-id="${nodeId}"]`);
+  if (selGroup) {
+    selGroup.classList.add('pulse-glow');
+    const shape = selGroup.querySelector('rect, ellipse, polygon');
+    if (shape) { shape.setAttribute('stroke', '#ffd700'); shape.setAttribute('stroke-width', 4); }
+  }
+}
+
+// --- Mode 2: Path Trace ---
+function modeTraceClick(nodeId) {
+  const upstream = new Set();
+  const downstream = new Set();
+  const upEdges = new Set();
+  const downEdges = new Set();
+
+  // BFS upstream (predecessors)
+  const qUp = [nodeId];
+  while (qUp.length) {
+    const cur = qUp.shift();
+    graph.edges.forEach(e => {
+      if (e.target === cur && e.source && !upstream.has(e.source)) {
+        upstream.add(e.source);
+        upEdges.add(e.id);
+        qUp.push(e.source);
+      }
+    });
+  }
+
+  // BFS downstream (successors)
+  const qDown = [nodeId];
+  while (qDown.length) {
+    const cur = qDown.shift();
+    graph.edges.forEach(e => {
+      if (e.source === cur && e.target && !downstream.has(e.target)) {
+        downstream.add(e.target);
+        downEdges.add(e.id);
+        qDown.push(e.target);
+      }
+    });
+  }
+
+  const allActive = new Set([nodeId, ...upstream, ...downstream]);
+  const allEdges = new Set([...upEdges, ...downEdges]);
+
+  // Dim unrelated
+  document.querySelectorAll('.node-group').forEach(g => {
+    const id = g.dataset.id;
+    if (!allActive.has(id)) {
+      g.classList.add('dimmed');
+    } else if (id === nodeId) {
+      g.classList.add('highlighted-node', 'pulse-glow');
+      const shape = g.querySelector('rect, ellipse, polygon');
+      if (shape) { shape.setAttribute('stroke', '#ffd700'); shape.setAttribute('stroke-width', 4); }
+    } else if (upstream.has(id)) {
+      g.classList.add('highlighted-node');
+      const shape = g.querySelector('rect, ellipse, polygon');
+      if (shape) { shape.setAttribute('stroke', '#4fc3f7'); shape.setAttribute('stroke-width', 3); }
+    } else if (downstream.has(id)) {
+      g.classList.add('highlighted-node');
+      const shape = g.querySelector('rect, ellipse, polygon');
+      if (shape) { shape.setAttribute('stroke', '#ef5350'); shape.setAttribute('stroke-width', 3); }
+    }
+  });
+
+  document.querySelectorAll('.edge-group').forEach(g => {
+    const id = g.dataset.id;
+    if (!allEdges.has(id)) {
+      g.classList.add('dimmed');
+    } else {
+      g.classList.add('highlighted-edge');
+      const path = g.querySelector('.edge-path');
+      if (path) {
+        const isUp = upEdges.has(id);
+        const color = isUp ? '#4fc3f7' : '#ef5350';
+        path.setAttribute('stroke', color);
+        path.setAttribute('stroke-width', 3);
+        path.setAttribute('marker-end', `url(#arrow-${color.replace('#','')})`);
+        // Add animated flow dots
+        addFlowDots(path, color, isUp);
+      }
+    }
+  });
+
+  // Update legend for trace mode
+  updateLegend('trace');
+}
+
+function addFlowDots(path, color, reverse) {
+  const flowLayer = document.getElementById('flowLayer');
+  const d = path.getAttribute('d');
+  // Create a hidden path for motion
+  const motionPath = createSvgEl('path', { d, fill: 'none', stroke: 'none' });
+  flowLayer.appendChild(motionPath);
+
+  for (let i = 0; i < 3; i++) {
+    // Always flow in path direction (source → target), matching the arrow
+    const animMotion = document.createElementNS('http://www.w3.org/2000/svg', 'animateMotion');
+    animMotion.setAttribute('dur', '2s');
+    animMotion.setAttribute('repeatCount', 'indefinite');
+    animMotion.setAttribute('begin', `${i * 0.66}s`);
+    animMotion.setAttribute('path', d);
+
+    const dot = createSvgEl('circle', { r: 4, fill: color, opacity: 0.85 });
+    dot.appendChild(animMotion);
+    dot.classList.add('flow-dot-el');
+    flowLayer.appendChild(dot);
+  }
+}
+
+// --- Mode 3: Focus Mode ---
+function modeFocusClick(nodeId) {
+  const reachable = new Set([nodeId]);
+  const reachableEdges = new Set();
+
+  // BFS to depth
+  let frontier = [nodeId];
+  for (let d = 0; d < focusDepth; d++) {
+    const nextFrontier = [];
+    frontier.forEach(cur => {
+      graph.edges.forEach(e => {
+        if (e.source === cur && e.target && !reachable.has(e.target)) {
+          reachable.add(e.target);
+          reachableEdges.add(e.id);
+          nextFrontier.push(e.target);
+        }
+        if (e.target === cur && e.source && !reachable.has(e.source)) {
+          reachable.add(e.source);
+          reachableEdges.add(e.id);
+          nextFrontier.push(e.source);
+        }
+      });
+      // Also add edges between already reachable nodes
+      graph.edges.forEach(e => {
+        if (reachable.has(e.source) && reachable.has(e.target)) reachableEdges.add(e.id);
+      });
+    });
+    frontier = nextFrontier;
+  }
+
+  // Also add edges between reachable nodes
+  graph.edges.forEach(e => {
+    if (reachable.has(e.source) && reachable.has(e.target)) reachableEdges.add(e.id);
+  });
+
+  document.querySelectorAll('.node-group').forEach(g => {
+    if (!reachable.has(g.dataset.id)) g.classList.add('dimmed');
+    else {
+      g.classList.add('highlighted-node');
+      if (g.dataset.id === nodeId) {
+        g.classList.add('pulse-glow');
+        const shape = g.querySelector('rect, ellipse, polygon');
+        if (shape) { shape.setAttribute('stroke', '#ffd700'); shape.setAttribute('stroke-width', 4); }
+      }
+    }
+  });
+  document.querySelectorAll('.edge-group').forEach(g => {
+    if (!reachableEdges.has(g.dataset.id)) g.classList.add('dimmed');
+    else {
+      g.classList.add('highlighted-edge');
+      const path = g.querySelector('.edge-path');
+      if (path) { path.setAttribute('stroke', '#e94560'); path.setAttribute('stroke-width', 2.5); }
+    }
+  });
+}
+
+function changeDepth(delta) {
+  focusDepth = Math.max(1, Math.min(10, focusDepth + delta));
+  document.getElementById('depthLabel').textContent = `깊이: ${focusDepth}`;
+  if (selectedNodeId) onNodeClick(selectedNodeId);
+}
+
+// ============================================================
+// Reset & Helpers
+// ============================================================
+function resetHighlights() {
+  document.querySelectorAll('.node-group').forEach(g => {
+    g.classList.remove('dimmed', 'highlighted-node', 'pulse-glow', 'search-match');
+    g.style.color = '';
+    const shape = g.querySelector('rect, ellipse, polygon, path');
+    if (shape && shape.dataset.origStroke) {
+      shape.setAttribute('stroke', shape.dataset.origStroke);
+      shape.setAttribute('stroke-width', shape.dataset.origStrokeWidth || 1.5);
+    }
+  });
+  document.querySelectorAll('.edge-group').forEach(g => {
+    g.classList.remove('dimmed', 'highlighted-edge');
+    const path = g.querySelector('.edge-path');
+    if (path) {
+      const edgeId = g.dataset.id;
+      const edge = graph.edges.find(e => e.id === edgeId);
+      if (edge) {
+        path.setAttribute('stroke', edge.style.strokeColor || '#999');
+        path.setAttribute('stroke-width', parseFloat(edge.style.strokeWidth) || 1.5);
+        path.setAttribute('marker-end', 'url(#arrowhead)');
+      }
+    }
+  });
+  // Clear flow dots
+  const flowLayer = document.getElementById('flowLayer');
+  if (flowLayer) flowLayer.innerHTML = '';
+
+  document.getElementById('infoPanel').classList.remove('visible');
+  updateLegend();
+}
+
+// ============================================================
+// Info Panel
+// ============================================================
+function showInfoPanel(nodeId) {
+  const node = graph.nodes[nodeId];
+  if (!node) return;
+
+  const panel = document.getElementById('infoPanel');
+  document.getElementById('infoPanelTitle').textContent = node.value || `Node ${nodeId}`;
+
+  const incoming = node.incoming.filter(id => graph.nodes[id]).map(id => graph.nodes[id].value || id);
+  const outgoing = node.outgoing.filter(id => graph.nodes[id]).map(id => graph.nodes[id].value || id);
+
+  let html = `<div class="stat">연결 수: <span>${node.incoming.length + node.outgoing.length}</span></div>`;
+  html += `<div class="stat">들어오는 연결: <span>${incoming.length}</span></div>`;
+  if (incoming.length) html += `<div style="color:#4fc3f7;margin-left:8px;font-size:12px;">${incoming.map(v=>'← '+v).join('<br>')}</div>`;
+  html += `<div class="stat">나가는 연결: <span>${outgoing.length}</span></div>`;
+  if (outgoing.length) html += `<div style="color:#ef5350;margin-left:8px;font-size:12px;">${outgoing.map(v=>'→ '+v).join('<br>')}</div>`;
+
+  if (currentMode === 'trace') {
+    // Count full path
+    const upCount = bfsCount(nodeId, 'up');
+    const downCount = bfsCount(nodeId, 'down');
+    html += `<hr style="border-color:#0f3460;margin:8px 0;">`;
+    html += `<div class="stat">전체 상류 노드: <span style="color:#4fc3f7">${upCount}</span></div>`;
+    html += `<div class="stat">전체 하류 노드: <span style="color:#ef5350">${downCount}</span></div>`;
+  }
+
+  document.getElementById('infoPanelContent').innerHTML = html;
+  panel.classList.add('visible');
+}
+
+function closeInfoPanel() {
+  document.getElementById('infoPanel').classList.remove('visible');
+}
+
+function bfsCount(nodeId, direction) {
+  const visited = new Set();
+  const q = [nodeId];
+  while (q.length) {
+    const cur = q.shift();
+    graph.edges.forEach(e => {
+      const next = direction === 'up' ? (e.target === cur ? e.source : null) : (e.source === cur ? e.target : null);
+      if (next && !visited.has(next)) { visited.add(next); q.push(next); }
+    });
+  }
+  return visited.size;
+}
+
+// ============================================================
+// Search
+// ============================================================
+function onSearch(query) {
+  resetHighlights();
+  if (!query.trim()) return;
+
+  const q = query.toLowerCase();
+  let found = false;
+  document.querySelectorAll('.node-group').forEach(g => {
+    const node = graph.nodes[g.dataset.id];
+    if (node && node.value.toLowerCase().includes(q)) {
+      g.classList.add('search-match');
+      found = true;
+    } else {
+      g.classList.add('dimmed');
+    }
+  });
+  if (!found) {
+    document.querySelectorAll('.node-group').forEach(g => g.classList.remove('dimmed'));
+  } else {
+    document.querySelectorAll('.edge-group').forEach(g => g.classList.add('dimmed'));
+  }
+}
+
+// ============================================================
+// Tooltip
+// ============================================================
+function showTooltip(event, node) {
+  const tt = document.getElementById('tooltip');
+  const connCount = node.incoming.length + node.outgoing.length;
+  tt.innerHTML = `<strong>${node.value || 'Node ' + node.id}</strong><br>연결: ${connCount}개 (입력: ${node.incoming.length}, 출력: ${node.outgoing.length})`;
+  tt.style.display = 'block';
+  tt.style.left = (event.clientX + 12) + 'px';
+  tt.style.top = (event.clientY - 10) + 'px';
+}
+
+function hideTooltip() {
+  document.getElementById('tooltip').style.display = 'none';
+}
+document.addEventListener('mousemove', e => {
+  const tt = document.getElementById('tooltip');
+  if (tt.style.display === 'block') {
+    tt.style.left = (e.clientX + 12) + 'px';
+    tt.style.top = (e.clientY - 10) + 'px';
+  }
+});
+
+// ============================================================
+// Legend
+// ============================================================
+function updateLegend(mode) {
+  const legend = document.getElementById('legend');
+  if (!legend) return;
+
+  if (mode === 'trace') {
+    legend.innerHTML = `
+      <div class="legend-item"><div class="legend-dot" style="background:#ffd700"></div> 선택된 노드</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#4fc3f7"></div> 상류 (Upstream)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ef5350"></div> 하류 (Downstream)</div>
+    `;
+  } else {
+    legend.innerHTML = `
+      <div style="font-size:11px; color:#888;">
+        클릭: 노드 선택 | 스크롤: 확대/축소 | 드래그: 이동
+      </div>
+    `;
+  }
+}
+
+// ============================================================
+// Demo: Load a sample diagram if no input
+// ============================================================
+function loadSample() {
+  const sampleXml = `<?xml version="1.0" encoding="UTF-8"?>
+<mxGraphModel>
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="2" value="사용자 요청" style="rounded=1;fillColor=#2196F3;strokeColor=#1565C0;fontColor=#ffffff;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="300" y="40" width="160" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="3" value="API Gateway" style="rounded=1;fillColor=#4CAF50;strokeColor=#2E7D32;fontColor=#ffffff;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="300" y="140" width="160" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="4" value="인증 서비스" style="rounded=1;fillColor=#FF9800;strokeColor=#E65100;fontColor=#ffffff;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="100" y="240" width="140" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="5" value="비즈니스 로직" style="rounded=1;fillColor=#9C27B0;strokeColor=#6A1B9A;fontColor=#ffffff;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="310" y="240" width="140" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="6" value="캐시 서버" style="rounded=1;fillColor=#00BCD4;strokeColor=#00838F;fontColor=#ffffff;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="520" y="240" width="140" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="7" value="데이터베이스" style="ellipse;fillColor=#F44336;strokeColor=#C62828;fontColor=#ffffff;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="200" y="370" width="160" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="8" value="메시지 큐" style="rounded=1;fillColor=#795548;strokeColor=#4E342E;fontColor=#ffffff;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="430" y="370" width="140" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="9" value="알림 서비스" style="rounded=1;fillColor=#607D8B;strokeColor=#37474F;fontColor=#ffffff;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="520" y="480" width="140" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="10" value="로그 수집기" style="rounded=1;fillColor=#8BC34A;strokeColor=#558B2F;fontColor=#ffffff;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="100" y="480" width="140" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="11" value="모니터링 대시보드" style="rounded=1;fillColor=#E91E63;strokeColor=#AD1457;fontColor=#ffffff;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="280" y="580" width="180" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="e1" edge="1" source="2" target="3" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+    <mxCell id="e2" edge="1" source="3" target="4" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+    <mxCell id="e3" edge="1" source="3" target="5" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+    <mxCell id="e4" edge="1" source="3" target="6" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+    <mxCell id="e5" edge="1" source="4" target="5" style="dashed=1;strokeColor=#888888;" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+    <mxCell id="e6" edge="1" source="5" target="7" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+    <mxCell id="e7" edge="1" source="5" target="8" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+    <mxCell id="e8" edge="1" source="6" target="7" style="dashed=1;strokeColor=#888888;" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+    <mxCell id="e9" edge="1" source="8" target="9" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+    <mxCell id="e10" edge="1" source="7" target="10" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+    <mxCell id="e11" edge="1" source="10" target="11" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+    <mxCell id="e12" edge="1" source="9" target="11" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+  </root>
+</mxGraphModel>`;
+  document.getElementById('xmlInput').value = sampleXml;
+  loadDiagram(sampleXml);
+}
+
+// Auto-load sample for demo
+window.addEventListener('load', loadSample);
+</script>
+</body>
+</html>
