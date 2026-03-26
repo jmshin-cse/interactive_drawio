@@ -3,284 +3,320 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Draw.io Original Viewer</title>
-    <!-- 오직 Cytoscape 코어 엔진만 사용합니다 (Dagre 삭제) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+    <title>Draw.io 100% Original Viewer</title>
+    
+    <!-- Draw.io의 심장인 공식 mxGraph 라이브러리 끌어오기 -->
+    <script type="text/javascript">
+        mxBasePath = 'https://cdnjs.cloudflare.com/ajax/libs/mxgraph/4.2.2/javascript/src';
+    </script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mxgraph/4.2.2/javascript/mxClient.min.js"></script>
+
     <style>
-        :root {
-            --primary-color: #1a73e8;
-            --bg-color: #f8f9fa;
-            --panel-bg: #ffffff;
-            --border-color: #dadce0;
+        :root { --primary-color: #1a73e8; --panel-bg: #fff; --border-color: #dadce0; }
+        body { font-family: sans-serif; margin: 0; display: flex; height: 100vh; background-color: #f8f9fa; overflow: hidden; }
+        
+        #sidebar { 
+            width: 350px; background: var(--panel-bg); border-right: 1px solid var(--border-color); 
+            padding: 24px; display: flex; flex-direction: column; z-index: 10; box-shadow: 2px 0 10px rgba(0,0,0,0.05); 
         }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            margin: 0; padding: 0;
-            display: flex; height: 100vh;
-            background-color: var(--bg-color);
-            overflow: hidden;
+        h2 { font-size: 1.25rem; margin-top: 0; color: #333; }
+        textarea { 
+            flex-grow: 1; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; 
+            font-family: monospace; font-size: 0.85rem; outline: none; margin-bottom: 16px; 
+            resize: none; white-space: pre; 
         }
-
-        #sidebar {
-            width: 350px;
-            background: var(--panel-bg);
-            border-right: 1px solid var(--border-color);
-            padding: 24px;
-            display: flex; flex-direction: column;
-            box-shadow: 2px 0 10px rgba(0,0,0,0.05);
-            z-index: 10;
-        }
-
-        h2 { font-size: 1.25rem; margin-top: 0; color: #202124; }
-        p.desc { font-size: 0.9rem; color: #5f6368; line-height: 1.5; margin-bottom: 20px; }
-
-        textarea {
-            flex-grow: 1; resize: none;
-            padding: 12px; border: 1px solid var(--border-color);
-            border-radius: 8px; font-family: monospace; font-size: 0.85rem;
-            outline: none; transition: border-color 0.2s;
-            margin-bottom: 16px; white-space: pre;
-        }
-
-        button {
-            background-color: var(--primary-color);
-            color: white; border: none; padding: 14px;
-            border-radius: 8px; font-size: 1rem; font-weight: bold;
-            cursor: pointer; transition: background-color 0.2s;
+        button { 
+            background-color: var(--primary-color); color: white; border: none; padding: 14px; 
+            border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s;
         }
         button:hover { background-color: #1557b0; }
-
-        #cy-container {
-            flex-grow: 1; position: relative;
+        
+        /* mxGraph가 그려질 도화지 */
+        #graphContainer {
+            flex-grow: 1; position: relative; overflow: auto;
             background-image: radial-gradient(#e0e0e0 1px, transparent 1px);
             background-size: 20px 20px;
         }
-        #cy { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
     </style>
 </head>
 <body>
 
     <div id="sidebar">
-        <h2>Draw.io XML 원본 뷰어</h2>
-        <p class="desc">도형 모양, 색상, 위치를 보존합니다.</p>
-        <textarea id="xmlInput" placeholder="Draw.io XML을 붙여넣으세요..."></textarea>
+        <h2>Draw.io 공식 엔진 Viewer</h2>
+        <p style="font-size:0.9rem; color:#666; line-height: 1.4;">
+            타사 렌더러를 거치지 않고 오리지널 mxGraph 엔진으로 100% 완벽하게 똑같이 렌더링합니다.
+        </p>
+        <textarea id="xmlInput"></textarea>
         <button id="renderBtn">오리지널 렌더링</button>
     </div>
 
-    <div id="cy-container">
-        <div id="cy"></div>
-    </div>
+    <!-- 그래프가 그려질 공식 컨테이너 -->
+    <div id="graphContainer"></div>
 
     <script>
-        let cy = null;
+        let graph = null;
+        let originalStyles = {}; // 각 셀의 원래 디자인(색상, 두께 등)을 백업할 해시맵
 
-        // ==========================================
-        // 1. 커스텀 파싱: Draw.io의 색상, 좌표, 모양까지 모두 추출!
-        // ==========================================
-        function parseDrawioXML(xmlString) {
-            const parser = new DOMParser();
-            const xmlDoc = parser.parseFromString(xmlString, "text/xml");
-            const cells = xmlDoc.querySelectorAll("mxCell");
+        // 테스트용 샘플 데이터
+        const sampleXML = `<mxGraphModel dx="1400" dy="1400" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+  <root>
+    <mxCell id="0" />
+    <mxCell id="1" parent="0" />
+    
+    <mxCell id="ext_users" value="Global Users (Web/App)" vertex="1" parent="1"><mxGeometry x="20" y="450" width="140" height="70" as="geometry" /></mxCell>
+    <mxCell id="ext_partners" value="Partner APIs (B2B)" vertex="1" parent="1"><mxGeometry x="20" y="550" width="140" height="70" as="geometry" /></mxCell>
+    <mxCell id="glb" value="Global Load Balancer (Route53)" vertex="1" parent="1"><mxGeometry x="220" y="500" width="140" height="70" as="geometry" /></mxCell>
+    <mxCell id="cdn_static" value="CDN (Static Assets)" vertex="1" parent="1"><mxGeometry x="400" y="350" width="120" height="60" as="geometry" /></mxCell>
+    <mxCell id="waf_edge" value="WAF / DDoS Protection" vertex="1" parent="1"><mxGeometry x="400" y="500" width="120" height="60" as="geometry" /></mxCell>
+    <mxCell id="api_gw_core" value="Main API Gateway (Kong)" vertex="1" parent="1"><mxGeometry x="580" y="500" width="140" height="70" as="geometry" /></mxCell>
+    
+    <mxCell id="svc_auth" value="Identity &amp; Auth Service" vertex="1" parent="1"><mxGeometry x="800" y="200" width="130" height="60" as="geometry" /></mxCell>
+    <mxCell id="svc_user_profile" value="User Profile Svc" vertex="1" parent="1"><mxGeometry x="800" y="300" width="130" height="60" as="geometry" /></mxCell>
+    <mxCell id="svc_account" value="Account Service (Ledger)" vertex="1" parent="1"><mxGeometry x="800" y="400" width="130" height="60" as="geometry" /></mxCell>
+    <mxCell id="svc_transaction" value="Transaction Core" vertex="1" parent="1"><mxGeometry x="800" y="500" width="130" height="60" as="geometry" /></mxCell>
+    <mxCell id="svc_payment_gw" value="Payment GW Adaptor" vertex="1" parent="1"><mxGeometry x="800" y="600" width="130" height="60" as="geometry" /></mxCell>
+    <mxCell id="svc_forex" value="Forex (FX) Rate Service" vertex="1" parent="1"><mxGeometry x="800" y="700" width="130" height="60" as="geometry" /></mxCell>
+    
+    <mxCell id="svc_risk_engine" value="Real-time Risk Engine" vertex="1" parent="1"><mxGeometry x="1050" y="450" width="130" height="60" as="geometry" /></mxCell>
+    <mxCell id="svc_fraud_det" value="Fraud Detection (ML)" vertex="1" parent="1"><mxGeometry x="1050" y="550" width="130" height="60" as="geometry" /></mxCell>
+    <mxCell id="svc_noti_hub" value="Notification Hub" vertex="1" parent="1"><mxGeometry x="1050" y="750" width="130" height="60" as="geometry" /></mxCell>
+    <mxCell id="svc_audit_log" value="Immutable Audit Log" vertex="1" parent="1"><mxGeometry x="1050" y="250" width="130" height="60" as="geometry" /></mxCell>
+    
+    <mxCell id="kafka_cluster" value="Kafka Event Bus (9 Nodes)" vertex="1" parent="1"><mxGeometry x="1300" y="500" width="180" height="80" as="geometry" /></mxCell>
+    <mxCell id="redis_cache_global" value="Global Redis Cluster" vertex="1" parent="1"><mxGeometry x="1050" y="100" width="130" height="60" as="geometry" /></mxCell>
+    <mxCell id="db_user_mysql" value="User DB (MySQL Sharded)" vertex="1" parent="1"><mxGeometry x="1050" y="350" width="130" height="60" as="geometry" /></mxCell>
+    <mxCell id="db_ledger_postgre" value="Ledger DB (PostgreSQL)" vertex="1" parent="1"><mxGeometry x="800" y="850" width="130" height="60" as="geometry" /></mxCell>
+    <mxCell id="db_tx_cassandra" value="Tx History (Cassandra)" vertex="1" parent="1"><mxGeometry x="1050" y="650" width="130" height="60" as="geometry" /></mxCell>
+    
+    <mxCell id="ext_bank_us" value="US Federal Reserve Adaptor" vertex="1" parent="1"><mxGeometry x="580" y="750" width="140" height="70" as="geometry" /></mxCell>
+    <mxCell id="ext_bank_eu" value="ECBadaptor (SEPA)" vertex="1" parent="1"><mxGeometry x="580" y="850" width="140" height="70" as="geometry" /></mxCell>
+    <mxCell id="ext_visa_master" value="Visa/MasterCard Network" vertex="1" parent="1"><mxGeometry x="580" y="650" width="140" height="70" as="geometry" /></mxCell>
+
+    <mxCell id="spark_streaming" value="Spark Streaming Analytics" vertex="1" parent="1"><mxGeometry x="1550" y="450" width="140" height="70" as="geometry" /></mxCell>
+    <mxCell id="aml_compliance" value="AML Compliance Checker" vertex="1" parent="1"><mxGeometry x="1550" y="550" width="140" height="70" as="geometry" /></mxCell>
+    <mxCell id="s3_data_lake" value="Data Lake (S3)" vertex="1" parent="1"><mxGeometry x="1750" y="500" width="120" height="60" as="geometry" /></mxCell>
+
+    <mxCell id="e1" edge="1" parent="1" source="ext_users" target="glb"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e2" edge="1" parent="1" source="ext_partners" target="glb"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e3" edge="1" parent="1" source="glb" target="cdn_static"><mxGeometry relative="1" as="geometry"><mxPoint as="offset" /></mxGeometry></mxCell>
+    <mxCell id="e4" edge="1" parent="1" source="glb" target="waf_edge"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e5" edge="1" parent="1" source="waf_edge" target="api_gw_core"><mxGeometry relative="1" as="geometry" /></mxCell>
+    
+    <mxCell id="e6" edge="1" parent="1" source="api_gw_core" target="svc_auth"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e7" edge="1" parent="1" source="api_gw_core" target="svc_user_profile"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e8" edge="1" parent="1" source="api_gw_core" target="svc_account"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e9" edge="1" parent="1" source="api_gw_core" target="svc_transaction"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e10" edge="1" parent="1" source="api_gw_core" target="svc_payment_gw"><mxGeometry relative="1" as="geometry" /></mxCell>
+    
+    <mxCell id="e11" edge="1" parent="1" source="svc_transaction" target="svc_auth"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e12" edge="1" parent="1" source="svc_transaction" target="svc_account"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e13" edge="1" parent="1" source="svc_transaction" target="svc_risk_engine"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e14" edge="1" parent="1" source="svc_transaction" target="svc_forex"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e15" edge="1" parent="1" source="svc_payment_gw" target="svc_risk_engine"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e16" edge="1" parent="1" source="svc_payment_gw" target="ext_visa_master"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e17" edge="1" parent="1" source="svc_account" target="ext_bank_us"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e18" edge="1" parent="1" source="svc_account" target="ext_bank_eu"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e19" edge="1" parent="1" source="svc_auth" target="svc_user_profile"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e20" edge="1" parent="1" source="svc_risk_engine" target="svc_fraud_det"><mxGeometry relative="1" as="geometry" /></mxCell>
+    
+    <mxCell id="e21" edge="1" parent="1" source="svc_auth" target="redis_cache_global"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e22" edge="1" parent="1" source="svc_auth" target="db_user_mysql"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e23" edge="1" parent="1" source="svc_user_profile" target="db_user_mysql"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e24" edge="1" parent="1" source="svc_account" target="db_ledger_postgre"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e25" edge="1" parent="1" source="svc_transaction" target="db_tx_cassandra"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e26" edge="1" parent="1" source="svc_forex" target="redis_cache_global"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e27" edge="1" parent="1" source="svc_fraud_det" target="db_tx_cassandra"><mxGeometry relative="1" as="geometry" /></mxCell>
+    
+    <mxCell id="e28" edge="1" parent="1" source="svc_transaction" target="kafka_cluster"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e29" edge="1" parent="1" source="svc_account" target="kafka_cluster"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e30" edge="1" parent="1" source="svc_auth" target="kafka_cluster"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e31" edge="1" parent="1" source="svc_payment_gw" target="kafka_cluster"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e32" edge="1" parent="1" source="svc_risk_engine" target="kafka_cluster"><mxGeometry relative="1" as="geometry" /></mxCell>
+    
+    <mxCell id="e33" edge="1" parent="1" source="kafka_cluster" target="svc_noti_hub"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e34" edge="1" parent="1" source="kafka_cluster" target="svc_audit_log"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e35" edge="1" parent="1" source="kafka_cluster" target="spark_streaming"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e36" edge="1" parent="1" source="kafka_cluster" target="aml_compliance"><mxGeometry relative="1" as="geometry" /></mxCell>
+    
+    <mxCell id="e37" edge="1" parent="1" source="svc_audit_log" target="db_ledger_postgre"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e38" edge="1" parent="1" source="svc_fraud_det" target="redis_cache_global"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e39" edge="1" parent="1" source="cdn_static" target="waf_edge"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e40" edge="1" parent="1" source="svc_transaction" target="svc_user_profile"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e41" edge="1" parent="1" source="svc_noti_hub" target="svc_user_profile"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+    <mxCell id="e42" edge="1" parent="1" source="spark_streaming" target="s3_data_lake"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="eAML" edge="1" parent="1" source="aml_compliance" target="s3_data_lake"><mxGeometry relative="1" as="geometry" /></mxCell>
+  </root>
+</mxGraphModel>`;
+        document.getElementById('xmlInput').value = sampleXML;
+
+        // 1. Draw.io 공식 엔진(mxGraph) 초기화
+        function initGraph() {
+            const container = document.getElementById('graphContainer');
+            if (graph) {
+                graph.destroy(); // 화면 초기화
+                originalStyles = {};
+            }
             
-            const elements = [];
+            // mxGraph 인스턴스 생성
+            graph = new mxGraph(container);
+            
+            // 뷰어 환경으로 잠금 (드래그, 연결 수정 방지)
+            graph.setCellsLocked(true); 
+            graph.setConnectable(false);
+            graph.setTooltips(false);
+            
+            // 마우스 드래그로 도화지 이동 (Panning) 허용
+            graph.setPanning(true); 
+            const panner = new mxPanningHandler(graph);
+            panner.useLeftButtonForPanning = true;
+        }
 
-            cells.forEach(cell => {
-                const isVertex = cell.getAttribute("vertex") === "1";
-                const isEdge = cell.getAttribute("edge") === "1";
-                const id = cell.getAttribute("id");
+        // 2. Draw.io XML 네이티브 파싱
+        function renderDrawioXML(xmlString) {
+            initGraph();
+            
+            try {
+                // 수동 파싱 없이 mxGraph 자체 내장 디코더를 사용해 100% 똑같이 읽어들임
+                const doc = mxUtils.parseXml(xmlString);
+                const codec = new mxCodec(doc);
+                const model = graph.getModel();
                 
-                // 1) 텍스트 추출 (줄바꿈 <br> 태그 보존)
-                let value = cell.getAttribute("value") || "";
-                value = value.replace(/<br\s*\/?>/gi, '\n'); 
-                value = value.replace(/<[^>]+>/g, '').trim(); 
-
-                // 2) 속성(Style) 파싱 (예: style="rounded=1;fillColor=#dae8fc...")
-                const styleStr = cell.getAttribute("style") || "";
-                const styles = {};
-                styleStr.split(";").forEach(s => {
-                    const parts = s.split("=");
-                    if (parts.length === 2) styles[parts[0]] = parts[1];
-                    else if (parts[0]) styles[parts[0]] = true; 
-                });
-
-                // 3) 기하학 정보(크기, 위치) 파싱
-                const geoNode = cell.querySelector("mxGeometry");
-                let geo = { x: 0, y: 0, w: 120, h: 60 };
-                if (geoNode) {
-                    geo.x = parseFloat(geoNode.getAttribute("x")) || 0;
-                    geo.y = parseFloat(geoNode.getAttribute("y")) || 0;
-                    geo.w = parseFloat(geoNode.getAttribute("width")) || 120;
-                    geo.h = parseFloat(geoNode.getAttribute("height")) || 60;
+                model.beginUpdate();
+                try {
+                    model.clear();
+                    codec.decode(doc.documentElement, model);
+                } finally {
+                    model.endUpdate();
                 }
 
-                if (isVertex) {
-                    // Draw.io 도형 -> 웹 그래픽 도형으로 1:1 맵핑
-                    let cyShape = 'rectangle';
-                    if (styles['ellipse']) cyShape = 'ellipse';
-                    else if (styles['rhombus']) cyShape = 'diamond';
-                    else if (styles['hexagon']) cyShape = 'hexagon';
-                    else if (styles['shape'] === 'cylinder') cyShape = 'barrel';
-                    else if (styles['rounded'] === '1' || styles['rounded'] === true) cyShape = 'round-rectangle';
+                // 나중에 원상복구를 위해 모든 요소(노드, 선)의 오리지널 CSS(스타일) 저장
+                const cells = model.cells;
+                for (let id in cells) {
+                    const cell = cells[id];
+                    if (cell.isVertex() || cell.isEdge()) {
+                        originalStyles[id] = cell.getStyle() || "";
+                    }
+                }
+                
+                attachHighlightInteraction();
+            } catch (err) {
+                console.error(err);
+                alert("XML 렌더링에 실패했습니다. 올바른 형식인지 확인하세요.");
+            }
+        }
 
-                    // 기본 테마 색상 맵핑
-                    const bgColor = styles['fillColor'] === 'none' ? 'transparent' : (styles['fillColor'] || '#ffffff');
-                    const borderColor = styles['strokeColor'] === 'none' ? 'transparent' : (styles['strokeColor'] || '#000000');
-                    const fontColor = styles['fontColor'] || '#000000';
-                    const borderWidth = styles['strokeWidth'] ? parseFloat(styles['strokeWidth']) : 1;
+        // 3. 자손(Downstream) 및 조상(Upstream) 노드 탐색 로직 (독자적 BFS 알고리즘 구현)
+        function getConnectedCells(targetCell) {
+            const model = graph.getModel();
+            const downstream = new Set();
+            const upstream = new Set();
 
-                    elements.push({
-                        data: { 
-                            id: id, 
-                            label: value,
-                            bg: bgColor,
-                            border: borderColor,
-                            borderW: borderWidth,
-                            fontColor: fontColor,
-                            w: geo.w,
-                            h: geo.h,
-                            shape: cyShape
-                        },
-                        // Draw.io는 좌상단이 기준점, Cytoscape 중앙이 기준점이므로 보정 계산
-                        position: { x: geo.x + (geo.w / 2), y: geo.y + (geo.h / 2) }
-                    });
-                } else if (isEdge) {
-                    const source = cell.getAttribute("source");
-                    const target = cell.getAttribute("target");
+            // [Phase 1] Downstream 찾기 (타겟 노드에서 나가는 방향 ─>)
+            let queue = [targetCell];
+            while (queue.length > 0) {
+                const current = queue.shift();
+                const edgeCount = model.getEdgeCount(current);
+                
+                for (let i = 0; i < edgeCount; i++) {
+                    const edge = model.getEdgeAt(current, i);
+                    const source = model.getTerminal(edge, true); // 출발지
+                    const target = model.getTerminal(edge, false); // 도착지
                     
-                    if (source && target) {
-                        // 꺾은선인지 직선인지 판별
-                        let curveStyle = 'bezier';
-                        if (styles['edgeStyle'] === 'orthogonalEdgeStyle' || styles['edgeStyle'] === 'elbowEdgeStyle') {
-                            curveStyle = 'taxi';
+                    // 나가는 방향(source가 내 자신)일 때만 하위로 계속 파고듦
+                    if (source === current && !downstream.has(edge)) {
+                        downstream.add(edge);
+                        if (target && !downstream.has(target)) {
+                            downstream.add(target);
+                            queue.push(target);
                         }
-                        
-                        const lineColor = styles['strokeColor'] === 'none' ? 'transparent' : (styles['strokeColor'] || '#000000');
-                        const width = styles['strokeWidth'] ? parseFloat(styles['strokeWidth']) : 1;
+                    }
+                }
+            }
 
-                        elements.push({
-                            data: { 
-                                id: id, 
-                                source: source, 
-                                target: target,
-                                lineColor: lineColor,
-                                width: width,
-                                curveStyle: curveStyle
+            // [Phase 2] Upstream 찾기 (타겟 노드로 들어오는 방향 <─)
+            queue = [targetCell];
+            while (queue.length > 0) {
+                const current = queue.shift();
+                const edgeCount = model.getEdgeCount(current);
+                
+                for (let i = 0; i < edgeCount; i++) {
+                    const edge = model.getEdgeAt(current, i);
+                    const source = model.getTerminal(edge, true);
+                    const target = model.getTerminal(edge, false);
+                    
+                    // 들어오는 방향(target이 내 자신)일 때만 상위로 거슬러 올라감
+                    if (target === current && !upstream.has(edge)) {
+                        upstream.add(edge);
+                        if (source && !upstream.has(source)) {
+                            upstream.add(source);
+                            queue.push(source);
+                        }
+                    }
+                }
+            }
+
+            // 양방향으로 추적된 모든 경로(선+박스) 합치기
+            return [...downstream, ...upstream, targetCell];
+        }
+
+        // 4. 클릭 인터랙션에 하이라이트 알고리즘 주입
+        function attachHighlightInteraction() {
+            graph.addListener(mxEvent.CLICK, function (sender, evt) {
+                const cell = evt.getProperty('cell');
+                const model = graph.getModel();
+                
+                model.beginUpdate();
+                try {
+                    // 일단 도화지의 모든 요소를 투명도 20%(opacity=20)로 강제 희미하게 만듦
+                    for (let id in model.cells) {
+                        const c = model.cells[id];
+                        if (c.isVertex() || c.isEdge()) {
+                            // 원본 스타일 텍스트 뒤에 opacity 조작 코드를 덧붙이는 방식
+                            model.setStyle(c, originalStyles[id] + ";opacity=15;");
+                        }
+                    }
+
+                    // 클릭한 요소가 박스(Vertex)일 경우에만 미로찾기 시작
+                    if (cell && cell.isVertex()) {
+                        const connectedCells = getConnectedCells(cell);
+                        
+                        // 알고리즘이 찾아낸 연결된 셀들만 투명도를 100%로 복원하고 강조
+                        connectedCells.forEach(c => {
+                            if (c.isVertex()) {
+                                // 노드: 투명도 복원, 진한 파란색 테두리
+                                model.setStyle(c, originalStyles[c.getId()] + ";opacity=100;strokeWidth=4;strokeColor=#1a73e8;");
+                            } else if (c.isEdge()) {
+                                // 선: 투명도 복원, 진한 파란색, 두께 증가
+                                model.setStyle(c, originalStyles[c.getId()] + ";opacity=100;strokeWidth=4;strokeColor=#1a73e8;");
                             }
                         });
+                    } 
+                    // 빈 공간(바탕) 클릭 시 전체 투명도 정상화 (리셋)
+                    else if (!cell) {
+                        for (let id in model.cells) {
+                            const c = model.cells[id];
+                            if (c.isVertex() || c.isEdge()) {
+                                model.setStyle(c, originalStyles[id]);
+                            }
+                        }
                     }
+                } finally {
+                    model.endUpdate(); // 화면 다시 그리기 반영
                 }
-            });
-
-            return elements;
-        }
-
-        // ==========================================
-        // 2. 렌더링 함수
-        // ==========================================
-        function renderDiagram(elements) {
-            if (cy) cy.destroy();
-
-            cy = cytoscape({
-                container: document.getElementById('cy'),
-                elements: elements,
                 
-                // data() 함수를 이용해 파싱된 원본 값을 그대로 스타일에 꽂아넣음
-                style: [
-                    {
-                        selector: 'node',
-                        style: {
-                            'label': 'data(label)',
-                            'background-color': 'data(bg)',
-                            'border-width': 'data(borderW)',
-                            'border-color': 'data(border)',
-                            'color': 'data(fontColor)',
-                            'shape': 'data(shape)',
-                            'width': 'data(w)',
-                            'height': 'data(h)',
-                            'text-valign': 'center',
-                            'text-halign': 'center',
-                            'text-wrap': 'wrap',
-                            'font-size': '14px',
-                            'transition-property': 'border-color, border-width, opacity',
-                            'transition-duration': '0.3s'
-                        }
-                    },
-                    {
-                        selector: 'edge',
-                        style: {
-                            'width': 'data(width)',
-                            'line-color': 'data(lineColor)',
-                            'target-arrow-color': 'data(lineColor)',
-                            'target-arrow-shape': 'triangle',
-                            'curve-style': 'data(curveStyle)',
-                            'taxi-direction': 'auto',
-                            'transition-property': 'line-color, target-arrow-color, width, opacity',
-                            'transition-duration': '0.3s'
-                        }
-                    },
-                    // [하이라이팅 효과] 오리지널 색상을 유지하며 눈에 띄게 두꺼운 빨간 테두리 적용
-                    {
-                        selector: 'node.highlighted',
-                        style: {
-                            'border-color': '#ff0055',
-                            'border-width': 4,
-                            'z-index': 10
-                        }
-                    },
-                    {
-                        selector: 'edge.highlighted',
-                        style: {
-                            'line-color': '#ff0055',
-                            'target-arrow-color': '#ff0055',
-                            'width': 4,
-                            'z-index': 10
-                        }
-                    },
-                    {
-                        selector: '.dimmed',
-                        style: { opacity: 0.15 }
-                    }
-                ],
-                // [가장 중요] 자동정렬 강제 배치(Dagre)를 끄고 읽어들인 절대 좌표(Preset)를 있는 그대로 렌더링!
-                layout: {
-                    name: 'preset',
-                    fit: true,
-                    padding: 40
-                }
-            });
-
-            // ==========================================
-            // 3. 하이라이팅 인터랙션 로직
-            // ==========================================
-            cy.on('tap', 'node', function(evt) {
-                const node = evt.target;
-                cy.elements().removeClass('highlighted').addClass('dimmed');
-                const connectedPath = node.union(node.predecessors()).union(node.successors());
-                connectedPath.removeClass('dimmed').addClass('highlighted');
-            });
-
-            cy.on('tap', function(evt) {
-                if (evt.target === cy) {
-                    cy.elements().removeClass('highlighted dimmed');
-                }
+                evt.consume(); // 브라우저 기본 클릭 동작 캔슬
             });
         }
 
-        // 텍스트 영역 이벤트 리스너
+        // 초기 시작 버튼 할당
         document.getElementById('renderBtn').addEventListener('click', () => {
-            const rawXml = document.getElementById('xmlInput').value;
-            try {
-                const parsedElements = parseDrawioXML(rawXml);
-                if(parsedElements.length === 0) {
-                    alert('노드나 엣지를 찾을 수 없습니다.'); return;
-                }
-                renderDiagram(parsedElements);
-            } catch (error) {
-                alert('잘못된 XML 형식이거나 파싱 중 오류가 발생했습니다.');
-                console.error(error);
-            }
+            renderDrawioXML(document.getElementById('xmlInput').value);
         });
+
+        // 로드 되자마자 샘플 렌더링
+        renderDrawioXML(document.getElementById('xmlInput').value);
+
     </script>
 </body>
 </html>
