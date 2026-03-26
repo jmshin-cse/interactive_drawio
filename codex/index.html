@@ -1,3 +1,664 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Draw.io Connected Path Highlighter</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Noto+Sans+KR:wght@400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #f4efe4;
+        --panel: rgba(255, 251, 243, 0.84);
+        --panel-strong: rgba(255, 248, 236, 0.94);
+        --line: rgba(54, 45, 26, 0.14);
+        --text: #1f180e;
+        --muted: #736650;
+        --accent: #1856c6;
+        --accent-strong: #0d3d92;
+        --shadow: 0 26px 80px rgba(59, 43, 12, 0.14);
+        --radius-xl: 28px;
+        --radius-lg: 22px;
+        --radius-md: 16px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background:
+          radial-gradient(circle at top left, rgba(234, 216, 166, 0.8), transparent 32%),
+          radial-gradient(circle at top right, rgba(120, 168, 255, 0.28), transparent 26%),
+          linear-gradient(180deg, #f7f2e8 0%, #eee4d2 100%);
+        color: var(--text);
+        font-family: "Noto Sans KR", sans-serif;
+      }
+
+      body::before,
+      body::after {
+        content: "";
+        position: fixed;
+        width: 34rem;
+        height: 34rem;
+        border-radius: 999px;
+        filter: blur(40px);
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      body::before {
+        top: -10rem;
+        right: -6rem;
+        background: rgba(255, 212, 119, 0.28);
+      }
+
+      body::after {
+        bottom: -12rem;
+        left: -10rem;
+        background: rgba(61, 125, 255, 0.18);
+      }
+
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      .app-shell {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: minmax(360px, 460px) minmax(0, 1fr);
+        min-height: 100vh;
+      }
+
+      .sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        padding: 24px;
+        background:
+          linear-gradient(180deg, rgba(255, 252, 247, 0.78), rgba(252, 246, 236, 0.9)),
+          radial-gradient(circle at top left, rgba(247, 211, 121, 0.24), transparent 36%);
+        border-right: 1px solid var(--line);
+        backdrop-filter: blur(16px);
+      }
+
+      .hero,
+      .panel,
+      .canvas-wrap,
+      .info-strip,
+      .status-banner {
+        border: 1px solid var(--line);
+        border-radius: var(--radius-xl);
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .hero {
+        padding: 24px;
+        background:
+          linear-gradient(135deg, rgba(255, 250, 241, 0.92), rgba(249, 242, 228, 0.88)),
+          radial-gradient(circle at top right, rgba(29, 103, 227, 0.1), transparent 30%);
+      }
+
+      .eyebrow {
+        margin: 0 0 10px;
+        color: var(--accent);
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        font-family: "Space Grotesk", sans-serif;
+        letter-spacing: -0.03em;
+      }
+
+      .hero h1 {
+        font-size: clamp(2rem, 3vw, 2.8rem);
+        line-height: 1;
+      }
+
+      .hero p,
+      .help-copy,
+      .status-banner,
+      .empty-state p {
+        color: var(--muted);
+        line-height: 1.65;
+      }
+
+      .hero p {
+        margin: 12px 0 0;
+      }
+
+      .panel {
+        padding: 18px;
+        border-radius: var(--radius-lg);
+        background: var(--panel-strong);
+      }
+
+      .panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+
+      .panel-head h2 {
+        font-size: 1.05rem;
+      }
+
+      .tiny-tag {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(24, 86, 198, 0.08);
+        color: var(--accent);
+        font-size: 0.8rem;
+        font-weight: 700;
+      }
+
+      .field-stack {
+        display: grid;
+        gap: 14px;
+      }
+
+      .field label,
+      .file-label {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--muted);
+        font-size: 0.9rem;
+        font-weight: 700;
+      }
+
+      textarea,
+      select,
+      input[type="file"] {
+        width: 100%;
+        border: 1px solid rgba(55, 45, 23, 0.15);
+        border-radius: var(--radius-md);
+        background: rgba(255, 255, 255, 0.72);
+        color: var(--text);
+      }
+
+      textarea {
+        min-height: 260px;
+        padding: 16px;
+        resize: vertical;
+        line-height: 1.6;
+      }
+
+      select,
+      input[type="file"] {
+        padding: 12px 14px;
+      }
+
+      .file-input {
+        display: grid;
+        gap: 8px;
+      }
+
+      .button-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .button {
+        border: 1px solid transparent;
+        border-radius: 999px;
+        padding: 12px 16px;
+        font-weight: 800;
+        transition:
+          transform 160ms ease,
+          box-shadow 160ms ease,
+          border-color 160ms ease,
+          background 160ms ease;
+      }
+
+      .button:hover {
+        transform: translateY(-1px);
+      }
+
+      .button-primary {
+        background: linear-gradient(135deg, #1856c6, #0c3990);
+        color: #fff;
+        box-shadow: 0 16px 34px rgba(24, 86, 198, 0.24);
+      }
+
+      .button-secondary {
+        background: rgba(255, 255, 255, 0.8);
+        color: var(--text);
+        border-color: rgba(54, 45, 26, 0.1);
+      }
+
+      .button-ghost {
+        background: rgba(24, 86, 198, 0.07);
+        color: var(--accent);
+      }
+
+      .help-copy {
+        margin: 0;
+        font-size: 0.92rem;
+      }
+
+      .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .stat {
+        padding: 14px;
+        border: 1px solid rgba(54, 45, 26, 0.1);
+        border-radius: var(--radius-md);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(250, 246, 238, 0.88)),
+          radial-gradient(circle at top right, rgba(24, 86, 198, 0.06), transparent 40%);
+      }
+
+      .stat .label {
+        display: block;
+        color: var(--muted);
+        font-size: 0.8rem;
+        margin-bottom: 6px;
+      }
+
+      .stat strong {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 1.4rem;
+      }
+
+      .detail-list,
+      .status-list,
+      .legend-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .detail-item,
+      .status-item,
+      .legend-item {
+        padding: 12px 14px;
+        border: 1px solid rgba(54, 45, 26, 0.1);
+        border-radius: var(--radius-md);
+        background: rgba(255, 255, 255, 0.62);
+      }
+
+      .detail-item strong,
+      .legend-item strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      .detail-item span,
+      .status-item span,
+      .legend-item span {
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .status-item.is-error {
+        border-color: rgba(184, 70, 45, 0.24);
+        background: rgba(255, 237, 232, 0.82);
+      }
+
+      .status-item.is-success {
+        border-color: rgba(25, 114, 91, 0.2);
+        background: rgba(235, 252, 246, 0.84);
+      }
+
+      .status-item.is-info {
+        border-color: rgba(24, 86, 198, 0.2);
+        background: rgba(235, 243, 255, 0.84);
+      }
+
+      .workspace {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        min-width: 0;
+        padding: 24px;
+      }
+
+      .info-strip {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+        gap: 16px;
+        padding: 18px;
+      }
+
+      .info-card {
+        padding: 4px;
+      }
+
+      .info-card h2 {
+        font-size: 1.15rem;
+        margin-bottom: 8px;
+      }
+
+      .canvas-wrap {
+        position: relative;
+        flex: 1;
+        min-height: 620px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at top, rgba(255, 219, 139, 0.22), transparent 24%),
+          linear-gradient(180deg, rgba(255, 252, 245, 0.92), rgba(245, 236, 220, 0.88));
+      }
+
+      #cy {
+        position: absolute;
+        inset: 0;
+      }
+
+      .canvas-overlay {
+        position: absolute;
+        left: 18px;
+        bottom: 18px;
+        display: grid;
+        gap: 10px;
+        width: min(360px, calc(100% - 36px));
+        pointer-events: none;
+      }
+
+      .status-banner {
+        padding: 14px 16px;
+        border-radius: 18px;
+        background: rgba(255, 251, 242, 0.88);
+        backdrop-filter: blur(10px);
+      }
+
+      .status-banner strong {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--accent-strong);
+      }
+
+      .legend-list {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .legend-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        margin-right: 8px;
+        border-radius: 999px;
+      }
+
+      .legend-dot.primary {
+        background: var(--accent);
+      }
+
+      .legend-dot.faded {
+        background: rgba(31, 24, 14, 0.26);
+      }
+
+      .legend-dot.base {
+        background: #4e84e8;
+      }
+
+      .empty-state {
+        position: absolute;
+        inset: 50% auto auto 50%;
+        width: min(540px, calc(100% - 48px));
+        padding: 26px 28px;
+        border: 1px solid rgba(54, 45, 26, 0.12);
+        border-radius: 28px;
+        background: rgba(255, 250, 241, 0.9);
+        box-shadow: var(--shadow);
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+      }
+
+      .empty-state h2 {
+        font-size: clamp(1.5rem, 2.2vw, 2rem);
+        margin-bottom: 10px;
+      }
+
+      .empty-state.is-hidden {
+        display: none;
+      }
+
+      code {
+        padding: 0.15em 0.38em;
+        border-radius: 0.4em;
+        background: rgba(28, 76, 160, 0.09);
+        color: var(--accent-strong);
+      }
+
+      @media (max-width: 1200px) {
+        .app-shell {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+
+        .info-strip {
+          grid-template-columns: 1fr;
+        }
+
+        .canvas-wrap {
+          min-height: 540px;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .sidebar,
+        .workspace {
+          padding: 16px;
+        }
+
+        .meta-grid,
+        .button-row,
+        .legend-list {
+          grid-template-columns: 1fr;
+        }
+
+        .canvas-wrap {
+          min-height: 460px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <section class="hero">
+          <p class="eyebrow">Draw.io XML to Graph</p>
+          <h1>Connected Path Highlighter</h1>
+          <p>
+            Draw.io XML을 붙여넣거나 업로드하면 노드/엣지 그래프로 파싱하고, 클릭한
+            노드를 기준으로 상류/하류 경로만 분리해서 강조합니다.
+          </p>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>입력</h2>
+            <span class="tiny-tag">XML / mxGraphModel</span>
+          </div>
+
+          <div class="field-stack">
+            <div class="field">
+              <label for="xmlInput">Draw.io XML</label>
+              <textarea id="xmlInput" spellcheck="false"></textarea>
+            </div>
+
+            <div class="file-input">
+              <label class="file-label" for="fileInput">파일 업로드</label>
+              <input id="fileInput" type="file" accept=".xml,.drawio,.txt" />
+            </div>
+
+            <div class="field">
+              <label for="pageSelect">페이지 선택</label>
+              <select id="pageSelect" disabled>
+                <option value="">페이지 없음</option>
+              </select>
+            </div>
+
+            <div class="button-row">
+              <button id="renderButton" class="button button-primary" type="button">
+                다이어그램 렌더링
+              </button>
+              <button id="sampleButton" class="button button-secondary" type="button">
+                샘플 불러오기
+              </button>
+            </div>
+
+            <div class="button-row">
+              <button id="fitButton" class="button button-secondary" type="button">
+                화면 맞춤
+              </button>
+              <button id="resetButton" class="button button-ghost" type="button">
+                하이라이트 초기화
+              </button>
+            </div>
+
+            <p class="help-copy">
+              현재 하이라이트 방식은 <strong>선택 노드 기준 상류/하류 경로 탐색</strong>입니다.
+              즉, 선택 노드로 들어오는 경로와 선택 노드에서 나가는 경로만 따라가며 강조합니다.
+            </p>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>요약</h2>
+            <span id="sourceLabel" class="tiny-tag">로컬 입력</span>
+          </div>
+
+          <div class="meta-grid">
+            <article class="stat">
+              <span class="label">Pages</span>
+              <strong id="statPages">0</strong>
+            </article>
+            <article class="stat">
+              <span class="label">Nodes</span>
+              <strong id="statNodes">0</strong>
+            </article>
+            <article class="stat">
+              <span class="label">Edges</span>
+              <strong id="statEdges">0</strong>
+            </article>
+            <article class="stat">
+              <span class="label">Warnings</span>
+              <strong id="statWarnings">0</strong>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>선택 노드</h2>
+            <span class="tiny-tag">Upstream / Downstream</span>
+          </div>
+          <div id="selectionInfo" class="detail-list">
+            <div class="detail-item">
+              <strong>선택 없음</strong>
+              <span>노드를 클릭하면 상류/하류 경로만 강조하고 통계를 보여줍니다.</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>파싱 로그</h2>
+            <span class="tiny-tag">Status</span>
+          </div>
+          <div id="statusList" class="status-list">
+            <div class="status-item is-info">
+              <span>샘플을 불러오거나 XML을 붙여넣은 뒤 렌더링하세요.</span>
+            </div>
+          </div>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <section class="info-strip">
+          <div class="info-card">
+            <h2>작동 방식</h2>
+            <p class="help-copy">
+              <code>mxCell[vertex="1"]</code>는 노드, <code>mxCell[edge="1"]</code>는 엣지로 읽습니다.
+              그런 다음 방향성 인접 리스트를 만들고, 클릭한 노드에서
+              <strong>incoming BFS + outgoing BFS</strong>를 각각 수행해 상류/하류 경로만 수집합니다.
+            </p>
+          </div>
+
+          <div class="info-card">
+            <div class="legend-list">
+              <div class="legend-item">
+                <strong><span class="legend-dot primary"></span>선택/연결</strong>
+                <span>짙은 파란색과 굵은 선으로 강조</span>
+              </div>
+              <div class="legend-item">
+                <strong><span class="legend-dot faded"></span>비연결 영역</strong>
+                <span>낮은 opacity로 흐리게 처리</span>
+              </div>
+              <div class="legend-item">
+                <strong><span class="legend-dot base"></span>기본 상태</strong>
+                <span>전체 다이어그램을 원래 색상으로 렌더링</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="canvas-wrap">
+          <div id="cy"></div>
+          <div id="emptyState" class="empty-state">
+            <p class="eyebrow">Ready</p>
+            <h2>Draw.io XML을 그래프로 변환해 보세요</h2>
+            <p>
+              Draw.io 원본 모델을 직접 렌더링해서 위치, 도형, 텍스트, 선 색을 최대한
+              원본 그대로 유지합니다.
+            </p>
+          </div>
+
+          <div class="canvas-overlay">
+            <div class="status-banner">
+              <strong id="bannerTitle">경로 하이라이트</strong>
+              <span id="bannerText">
+                노드를 클릭하면 해당 노드의 상류/하류 경로만 강조하고, 나머지는 흐리게 처리합니다.
+              </span>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+    <script>
+      window.mxLoadResources = false;
+      window.mxBasePath = "https://cdn.jsdelivr.net/gh/jgraph/drawio@dev/src/main/webapp/mxgraph";
+    </script>
+    <script src="https://cdn.jsdelivr.net/gh/jgraph/drawio@dev/src/main/webapp/mxgraph/mxClient.js"></script>
+    <script>
+      const SAMPLE_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <mxGraphModel dx="1400" dy="1400" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
   <root>
     <mxCell id="0" />
@@ -87,4 +748,936 @@
     <mxCell id="e42" edge="1" parent="1" source="spark_streaming" target="s3_data_lake"><mxGeometry relative="1" as="geometry" /></mxCell>
     <mxCell id="eAML" edge="1" parent="1" source="aml_compliance" target="s3_data_lake"><mxGeometry relative="1" as="geometry" /></mxCell>
   </root>
-</mxGraphModel>
+</mxGraphModel>`;
+
+      const ui = {
+        xmlInput: document.getElementById("xmlInput"),
+        fileInput: document.getElementById("fileInput"),
+        pageSelect: document.getElementById("pageSelect"),
+        renderButton: document.getElementById("renderButton"),
+        sampleButton: document.getElementById("sampleButton"),
+        fitButton: document.getElementById("fitButton"),
+        resetButton: document.getElementById("resetButton"),
+        sourceLabel: document.getElementById("sourceLabel"),
+        statPages: document.getElementById("statPages"),
+        statNodes: document.getElementById("statNodes"),
+        statEdges: document.getElementById("statEdges"),
+        statWarnings: document.getElementById("statWarnings"),
+        selectionInfo: document.getElementById("selectionInfo"),
+        statusList: document.getElementById("statusList"),
+        emptyState: document.getElementById("emptyState"),
+        bannerTitle: document.getElementById("bannerTitle"),
+        bannerText: document.getElementById("bannerText"),
+      };
+
+      const state = {
+        graph: null,
+        renderedStyleMap: new Map(),
+        sourceName: "로컬 입력",
+        parsedDocument: null,
+        currentPageIndex: 0,
+      };
+
+      init();
+
+      function init() {
+        ui.xmlInput.value = SAMPLE_XML;
+        bindEvents();
+        queueStatus("샘플 XML이 기본 입력으로 채워졌습니다. 바로 렌더링할 수 있습니다.", "info");
+        renderFromInput();
+      }
+
+      function bindEvents() {
+        ui.renderButton.addEventListener("click", () => {
+          state.sourceName = "텍스트 입력";
+          renderFromInput();
+        });
+
+        ui.sampleButton.addEventListener("click", () => {
+          state.sourceName = "내장 샘플";
+          ui.xmlInput.value = SAMPLE_XML;
+          renderFromInput();
+        });
+
+        ui.fileInput.addEventListener("change", async (event) => {
+          const [file] = event.target.files || [];
+          if (!file) {
+            return;
+          }
+
+          const xmlText = await file.text();
+          state.sourceName = file.name;
+          ui.xmlInput.value = xmlText;
+          renderFromInput();
+          ui.fileInput.value = "";
+        });
+
+        ui.pageSelect.addEventListener("change", () => {
+          const index = Number(ui.pageSelect.value);
+          if (!Number.isFinite(index) || !state.parsedDocument) {
+            return;
+          }
+
+          state.currentPageIndex = index;
+          renderCurrentPage();
+        });
+
+        ui.fitButton.addEventListener("click", () => {
+          fitGraph();
+        });
+
+        ui.resetButton.addEventListener("click", () => {
+          resetHighlight();
+        });
+
+        window.addEventListener("resize", () => {
+          if (!state.graph) {
+            return;
+          }
+          fitGraph();
+        });
+      }
+
+      function renderFromInput() {
+        const xmlText = ui.xmlInput.value.trim();
+
+        if (!xmlText) {
+          queueStatus("XML 입력이 비어 있습니다. Draw.io XML을 붙여넣어 주세요.", "error");
+          return;
+        }
+
+        try {
+          const parsedDocument = parseDrawioDocument(xmlText);
+          state.parsedDocument = parsedDocument;
+          state.currentPageIndex = 0;
+          ui.sourceLabel.textContent = state.sourceName;
+
+          populatePageSelect(parsedDocument.pages);
+          updateSummary(parsedDocument);
+          renderCurrentPage();
+
+          queueStatus(
+            `문서 파싱 완료: 페이지 ${parsedDocument.pages.length}개, 노드 ${parsedDocument.summary.nodeCount}개, 엣지 ${parsedDocument.summary.edgeCount}개`,
+            "success"
+          );
+        } catch (error) {
+          console.error(error);
+          queueStatus(error.message || "알 수 없는 오류가 발생했습니다.", "error");
+        }
+      }
+
+      function renderCurrentPage() {
+        const page = state.parsedDocument?.pages[state.currentPageIndex];
+
+        if (!page) {
+          return;
+        }
+
+        destroyGraph();
+        ui.emptyState.classList.add("is-hidden");
+        state.graph = createGraph(document.getElementById("cy"));
+        loadPageIntoGraph(state.graph, page);
+        state.renderedStyleMap = captureOriginalStyles(page, state.graph);
+        bindGraphEvents(state.graph);
+        updateSelectionPanel(null);
+        ui.bannerTitle.textContent = `페이지: ${page.name}`;
+        ui.bannerText.textContent =
+          "원본 draw.io 형태를 최대한 유지한 채, 노드를 클릭하면 상류/하류 경로만 강조합니다.";
+        fitGraph();
+      }
+
+      function createGraph(container) {
+        container.innerHTML = "";
+
+        const graph = new mxGraph(container);
+        graph.setConnectable(false);
+        graph.setCellsEditable(false);
+        graph.setCellsMovable(false);
+        graph.setCellsResizable(false);
+        graph.setCellsBendable(false);
+        graph.setCellsCloneable(false);
+        graph.setCellsSelectable(false);
+        graph.setAllowDanglingEdges(false);
+        graph.setPanning(true);
+        graph.centerZoom = false;
+        graph.setTooltips(true);
+        graph.setHtmlLabels(true);
+
+        container.addEventListener(
+          "wheel",
+          (event) => {
+            event.preventDefault();
+            if (event.deltaY < 0) {
+              graph.zoomIn();
+            } else {
+              graph.zoomOut();
+            }
+          },
+          { passive: false }
+        );
+
+        return graph;
+      }
+
+      function loadPageIntoGraph(graph, page) {
+        const xmlDoc = parseXml(page.rawXml, page.name);
+        const modelNode =
+          xmlDoc.documentElement.nodeName === "mxGraphModel"
+            ? xmlDoc.documentElement
+            : xmlDoc.querySelector("mxGraphModel");
+
+        if (!modelNode) {
+          throw new Error(`"${page.name}" 페이지 원본 XML을 그래프에 렌더링할 수 없습니다.`);
+        }
+
+        const codec = new mxCodec(xmlDoc);
+        codec.decode(modelNode, graph.getModel());
+      }
+
+      function bindGraphEvents(graph) {
+        graph.addListener(mxEvent.CLICK, (_sender, eventObject) => {
+          const cell = eventObject.getProperty("cell");
+          const page = state.parsedDocument?.pages[state.currentPageIndex];
+
+          if (!page) {
+            return;
+          }
+
+          if (cell && graph.getModel().isVertex(cell) && page.nodeMap.has(cell.id)) {
+            highlightDirectionalPaths(page, cell.id);
+          } else {
+            resetHighlight();
+          }
+        });
+      }
+
+      function highlightDirectionalPaths(page, startNodeId) {
+        const component = collectDirectionalPaths(page.graph, startNodeId);
+        const graph = state.graph;
+
+        if (!graph) {
+          return;
+        }
+
+        applyHighlightStyles(page, component, startNodeId, graph);
+
+        updateSelectionPanel({
+          node: page.nodeMap.get(startNodeId),
+          component,
+        });
+
+        ui.bannerTitle.textContent = `선택 노드: ${page.nodeMap.get(startNodeId)?.title || startNodeId}`;
+        ui.bannerText.textContent =
+          `상류 노드 ${component.upstreamNodeIds.size}개, 하류 노드 ${component.downstreamNodeIds.size}개, 전체 엣지 ${component.edgeIds.size}개를 강조했습니다.`;
+      }
+
+      function resetHighlight() {
+        if (!state.graph) {
+          return;
+        }
+
+        restoreOriginalStyles(state.graph);
+        updateSelectionPanel(null);
+        ui.bannerTitle.textContent = "경로 하이라이트";
+        ui.bannerText.textContent =
+          "노드를 클릭하면 해당 노드의 상류/하류 경로만 강조하고, 나머지는 흐리게 처리합니다.";
+      }
+
+      function destroyGraph() {
+        if (!state.graph) {
+          return;
+        }
+
+        try {
+          state.graph.destroy();
+        } catch (error) {
+          console.warn(error);
+        }
+
+        document.getElementById("cy").innerHTML = "";
+        state.graph = null;
+        state.renderedStyleMap = new Map();
+      }
+
+      function fitGraph() {
+        if (!state.graph) {
+          return;
+        }
+
+        state.graph.fit(12);
+        state.graph.center(true, true, 0.5, 0.5);
+      }
+
+      function captureOriginalStyles(page, graph) {
+        const styleMap = new Map();
+
+        page.nodes.forEach((node) => {
+          const cell = graph.getModel().getCell(node.id);
+          if (cell) {
+            styleMap.set(node.id, graph.getModel().getStyle(cell) || "");
+          }
+        });
+
+        page.edges.forEach((edge) => {
+          const cell = graph.getModel().getCell(edge.id);
+          if (cell) {
+            styleMap.set(edge.id, graph.getModel().getStyle(cell) || "");
+          }
+        });
+
+        return styleMap;
+      }
+
+      function restoreOriginalStyles(graph) {
+        const model = graph.getModel();
+        model.beginUpdate();
+
+        try {
+          state.renderedStyleMap.forEach((styleString, id) => {
+            const cell = model.getCell(id);
+            if (cell) {
+              model.setStyle(cell, styleString);
+            }
+          });
+        } finally {
+          model.endUpdate();
+        }
+
+        graph.refresh();
+      }
+
+      function applyHighlightStyles(page, component, startNodeId, graph) {
+        const model = graph.getModel();
+        const highlightedNodeIds = component.nodeIds;
+        const highlightedEdgeIds = component.edgeIds;
+
+        model.beginUpdate();
+
+        try {
+          page.nodes.forEach((node) => {
+            const cell = model.getCell(node.id);
+            const originalStyle = state.renderedStyleMap.get(node.id) || "";
+
+            if (!cell) {
+              return;
+            }
+
+            if (!highlightedNodeIds.has(node.id)) {
+              model.setStyle(cell, applyStyleOverrides(originalStyle, { opacity: 18 }));
+              return;
+            }
+
+            const strokeWidth = readNumber(node.styleMap.strokeWidth, 1);
+            const overrides =
+              node.id === startNodeId
+                ? { strokeWidth: Math.max(strokeWidth + 1.2, 3) }
+                : {};
+
+            model.setStyle(cell, applyStyleOverrides(originalStyle, overrides));
+          });
+
+          page.edges.forEach((edge) => {
+            const cell = model.getCell(edge.id);
+            const originalStyle = state.renderedStyleMap.get(edge.id) || "";
+
+            if (!cell) {
+              return;
+            }
+
+            if (!highlightedEdgeIds.has(edge.id)) {
+              model.setStyle(cell, applyStyleOverrides(originalStyle, { opacity: 12 }));
+              return;
+            }
+
+            const strokeWidth = readNumber(edge.styleMap?.strokeWidth, 1);
+            model.setStyle(
+              cell,
+              applyStyleOverrides(originalStyle, {
+                strokeWidth: Math.max(strokeWidth + 1.4, 3),
+              })
+            );
+          });
+        } finally {
+          model.endUpdate();
+        }
+
+        graph.refresh();
+      }
+
+      function populatePageSelect(pages) {
+        ui.pageSelect.innerHTML = "";
+
+        pages.forEach((page, index) => {
+          const option = document.createElement("option");
+          option.value = String(index);
+          option.textContent = `${index + 1}. ${page.name}`;
+          ui.pageSelect.appendChild(option);
+        });
+
+        ui.pageSelect.disabled = pages.length === 0;
+        ui.pageSelect.value = String(state.currentPageIndex);
+      }
+
+      function updateSummary(parsedDocument) {
+        ui.statPages.textContent = String(parsedDocument.summary.pageCount);
+        ui.statNodes.textContent = String(parsedDocument.summary.nodeCount);
+        ui.statEdges.textContent = String(parsedDocument.summary.edgeCount);
+        ui.statWarnings.textContent = String(parsedDocument.summary.warningCount);
+      }
+
+      function updateSelectionPanel(payload) {
+        if (!payload) {
+          ui.selectionInfo.innerHTML = `
+            <div class="detail-item">
+              <strong>선택 없음</strong>
+              <span>노드를 클릭하면 상류/하류 경로만 강조하고 통계를 보여줍니다.</span>
+            </div>
+          `;
+          return;
+        }
+
+        const { node, component } = payload;
+        const metadataText = summarizeMetadata(node.metadata);
+        ui.selectionInfo.innerHTML = `
+          <div class="detail-item">
+            <strong>${escapeHtml(node.title)}</strong>
+            <span>ID: ${escapeHtml(node.id)}</span>
+          </div>
+          <div class="detail-item">
+            <strong>하이라이트 범위</strong>
+            <span>전체 노드 ${component.nodeIds.size}개 / 전체 엣지 ${component.edgeIds.size}개</span>
+          </div>
+          <div class="detail-item">
+            <strong>방향별 통계</strong>
+            <span>상류 노드 ${component.upstreamNodeIds.size}개 / 하류 노드 ${component.downstreamNodeIds.size}개</span>
+          </div>
+          <div class="detail-item">
+            <strong>레이블</strong>
+            <span>${escapeHtml(node.label || "(비어 있음)")}</span>
+          </div>
+          <div class="detail-item">
+            <strong>메타데이터 요약</strong>
+            <span>${escapeHtml(metadataText || "별도 메타데이터 없음")}</span>
+          </div>
+        `;
+      }
+
+      function queueStatus(message, tone = "info") {
+        const item = document.createElement("div");
+        item.className = `status-item is-${tone}`;
+        item.innerHTML = `<span>${escapeHtml(message)}</span>`;
+        ui.statusList.prepend(item);
+
+        while (ui.statusList.children.length > 6) {
+          ui.statusList.removeChild(ui.statusList.lastElementChild);
+        }
+      }
+
+      function parseDrawioDocument(xmlText) {
+        const doc = parseXml(xmlText, "입력 XML");
+        const rootName = doc.documentElement?.nodeName;
+        const pages = [];
+        const warnings = [];
+
+        if (rootName === "mxfile") {
+          const diagrams = Array.from(doc.getElementsByTagName("diagram"));
+          diagrams.forEach((diagram, index) => {
+            const graphXml = extractDiagramXml(diagram);
+            pages.push(
+              parsePageModel(graphXml, {
+                id: diagram.getAttribute("id") || `page-${index + 1}`,
+                name: diagram.getAttribute("name") || `Page ${index + 1}`,
+                warnings,
+              })
+            );
+          });
+        } else if (rootName === "diagram") {
+          pages.push(
+            parsePageModel(extractDiagramXml(doc.documentElement), {
+              id: doc.documentElement.getAttribute("id") || "page-1",
+              name: doc.documentElement.getAttribute("name") || "Page 1",
+              warnings,
+            })
+          );
+        } else if (rootName === "mxGraphModel") {
+          pages.push(
+            parsePageModel(xmlText, {
+              id: "page-1",
+              name: "Page 1",
+              warnings,
+            })
+          );
+        } else {
+          throw new Error("지원되는 루트는 <mxfile>, <diagram>, <mxGraphModel> 중 하나여야 합니다.");
+        }
+
+        if (!pages.length) {
+          throw new Error("렌더링 가능한 페이지를 찾지 못했습니다.");
+        }
+
+        return {
+          pages,
+          summary: {
+            pageCount: pages.length,
+            nodeCount: pages.reduce((sum, page) => sum + page.nodes.length, 0),
+            edgeCount: pages.reduce((sum, page) => sum + page.edges.length, 0),
+            warningCount: warnings.length,
+          },
+          warnings,
+        };
+      }
+
+      function parsePageModel(graphXml, pageMeta) {
+        const pageDoc = parseXml(graphXml, pageMeta.name);
+        const modelEl =
+          pageDoc.documentElement.nodeName === "mxGraphModel"
+            ? pageDoc.documentElement
+            : pageDoc.querySelector("mxGraphModel");
+        const rootEl = modelEl?.querySelector("root");
+
+        if (!modelEl || !rootEl) {
+          throw new Error(`"${pageMeta.name}" 페이지에서 <mxGraphModel><root>를 찾지 못했습니다.`);
+        }
+
+        const rawCells = new Map();
+
+        Array.from(rootEl.children).forEach((element) => {
+          const normalized = normalizeCellElement(element);
+          if (!normalized || !normalized.id) {
+            return;
+          }
+          rawCells.set(normalized.id, normalized);
+        });
+
+        const nodes = [];
+        const nodeMap = new Map();
+
+        rawCells.forEach((cell) => {
+          if (!cell.vertex || isStructuralCell(cell)) {
+            return;
+          }
+
+          const styleMap = parseStyleString(cell.styleString);
+          const geometry = cell.geometry;
+          const width = clampNumber(geometry.width, 90, 420);
+          const height = clampNumber(geometry.height, 42, 220);
+          const label = decodeLabel(cell.value);
+          const title = label || cell.metadata.label || cell.id;
+          const node = {
+            id: cell.id,
+            label,
+            title,
+            metadata: cell.metadata,
+            geometry,
+            width,
+            height,
+            styleMap,
+            position: {
+              x: geometry.x + width / 2,
+              y: geometry.y + height / 2,
+            },
+            fillColor: normalizeDrawioColor(styleMap.fillColor, "#dae8fc"),
+            borderColor: normalizeDrawioColor(styleMap.strokeColor, "#6c8ebf"),
+            textColor: normalizeDrawioColor(styleMap.fontColor, "#1f180e"),
+            shape: mapDrawioShapeToCytoscape(styleMap),
+          };
+
+          nodes.push(node);
+          nodeMap.set(node.id, node);
+        });
+
+        const edges = [];
+        const edgeMap = new Map();
+
+        rawCells.forEach((cell) => {
+          if (!cell.edge) {
+            return;
+          }
+
+          if (!cell.source || !cell.target || !nodeMap.has(cell.source) || !nodeMap.has(cell.target)) {
+            pageMeta.warnings.push(`끊어진 엣지 ${cell.id}는 source/target이 없어 건너뛰었습니다.`);
+            return;
+          }
+
+          const styleMap = parseStyleString(cell.styleString);
+          const edge = {
+            id: cell.id,
+            source: cell.source,
+            target: cell.target,
+            label: decodeLabel(cell.value),
+            metadata: cell.metadata,
+            styleMap,
+            lineColor: normalizeDrawioColor(styleMap.strokeColor, "#7f8da3"),
+            textColor: normalizeDrawioColor(styleMap.fontColor, "#504737"),
+          };
+
+          edges.push(edge);
+          edgeMap.set(edge.id, edge);
+        });
+
+        const graph = buildGraph(nodes, edges);
+        const elements = buildElements(nodes, edges);
+        const hasPresetPositions = nodes.some((node) => node.position.x !== 0 || node.position.y !== 0);
+
+        return {
+          id: pageMeta.id,
+          name: pageMeta.name,
+          rawXml: graphXml,
+          nodes,
+          edges,
+          nodeMap,
+          edgeMap,
+          graph,
+          elements,
+          hasPresetPositions,
+        };
+      }
+
+      function buildElements(nodes, edges) {
+        return [
+          ...nodes.map((node) => ({
+            data: {
+              id: node.id,
+              label: node.label || node.id,
+              width: node.width,
+              height: node.height,
+              textWidth: Math.max(node.width - 16, 72),
+              fillColor: node.fillColor,
+              borderColor: node.borderColor,
+              textColor: node.textColor,
+              shape: node.shape,
+            },
+            position: node.position,
+          })),
+          ...edges.map((edge) => ({
+            data: {
+              id: edge.id,
+              source: edge.source,
+              target: edge.target,
+              label: edge.label,
+              lineColor: edge.lineColor,
+              textColor: edge.textColor,
+            },
+          })),
+        ];
+      }
+
+      function buildGraph(nodes, edges) {
+        const incomingNodeIds = new Map();
+        const outgoingNodeIds = new Map();
+        const incomingEdgeIds = new Map();
+        const outgoingEdgeIds = new Map();
+
+        nodes.forEach((node) => {
+          incomingNodeIds.set(node.id, new Set());
+          outgoingNodeIds.set(node.id, new Set());
+          incomingEdgeIds.set(node.id, new Set());
+          outgoingEdgeIds.set(node.id, new Set());
+        });
+
+        edges.forEach((edge) => {
+          outgoingNodeIds.get(edge.source)?.add(edge.target);
+          incomingNodeIds.get(edge.target)?.add(edge.source);
+          outgoingEdgeIds.get(edge.source)?.add(edge.id);
+          incomingEdgeIds.get(edge.target)?.add(edge.id);
+        });
+
+        return {
+          incomingNodeIds,
+          outgoingNodeIds,
+          incomingEdgeIds,
+          outgoingEdgeIds,
+        };
+      }
+
+      function collectDirectionalPaths(graph, startNodeId) {
+        const upstream = traverseDirection(graph, startNodeId, {
+          neighborMap: graph.incomingNodeIds,
+          edgeMap: graph.incomingEdgeIds,
+        });
+        const downstream = traverseDirection(graph, startNodeId, {
+          neighborMap: graph.outgoingNodeIds,
+          edgeMap: graph.outgoingEdgeIds,
+        });
+        const nodeIds = new Set([startNodeId, ...upstream.nodeIds, ...downstream.nodeIds]);
+        const edgeIds = new Set([...upstream.edgeIds, ...downstream.edgeIds]);
+
+        return {
+          nodeIds,
+          edgeIds,
+          upstreamNodeIds: upstream.nodeIds,
+          downstreamNodeIds: downstream.nodeIds,
+          upstreamEdgeIds: upstream.edgeIds,
+          downstreamEdgeIds: downstream.edgeIds,
+        };
+      }
+
+      function traverseDirection(graph, startNodeId, { neighborMap, edgeMap }) {
+        const visited = new Set([startNodeId]);
+        const nodeIds = new Set();
+        const edgeIds = new Set();
+        const queue = [startNodeId];
+
+        /*
+          핵심 하이라이트 알고리즘
+
+          1. startNodeId를 시작점으로 잡고, 한 방향의 인접 리스트만 본다.
+          2. upstream 탐색이면 incoming만, downstream 탐색이면 outgoing만 따라간다.
+          3. 현재 노드에서 같은 방향으로 이어지는 edge id를 수집한다.
+          4. 아직 방문하지 않은 다음 노드를 큐에 넣고 계속 진행한다.
+
+          이렇게 하면 "선택 노드를 중심으로 한 상류/하류 경로"만 남고,
+          선택 노드를 거치지 않는 옆 가지나 약한 연결 때문에 전체가 선택되는 문제를 막을 수 있다.
+        */
+        while (queue.length > 0) {
+          const currentNodeId = queue.shift();
+          const attachedEdges = edgeMap.get(currentNodeId) || new Set();
+
+          attachedEdges.forEach((edgeId) => edgeIds.add(edgeId));
+
+          const neighbors = neighborMap.get(currentNodeId) || new Set();
+
+          neighbors.forEach((neighborId) => {
+            if (visited.has(neighborId)) {
+              return;
+            }
+
+            visited.add(neighborId);
+            nodeIds.add(neighborId);
+            queue.push(neighborId);
+          });
+        }
+
+        return {
+          nodeIds,
+          edgeIds,
+        };
+      }
+
+      function normalizeCellElement(element) {
+        const wrapperCell =
+          element.nodeName === "mxCell"
+            ? element
+            : Array.from(element.children).find((child) => child.nodeName === "mxCell");
+
+        if (!wrapperCell) {
+          return null;
+        }
+
+        const wrapper = element.nodeName === "mxCell" ? null : element;
+
+        /*
+          Draw.io XML은 두 형태가 섞여 나올 수 있다.
+
+          1. <mxCell ... />
+          2. <UserObject label="..." ...><mxCell ... /></UserObject>
+
+          따라서 wrapper와 실제 mxCell을 모두 읽어야 label/메타데이터를 놓치지 않는다.
+        */
+        return {
+          id: wrapperCell.getAttribute("id"),
+          parent: wrapperCell.getAttribute("parent"),
+          source: wrapperCell.getAttribute("source"),
+          target: wrapperCell.getAttribute("target"),
+          vertex: wrapperCell.getAttribute("vertex") === "1",
+          edge: wrapperCell.getAttribute("edge") === "1",
+          value:
+            firstNonEmpty(
+              wrapper?.getAttribute("label"),
+              wrapper?.getAttribute("value"),
+              wrapperCell.getAttribute("value"),
+              ""
+            ),
+          styleString: wrapperCell.getAttribute("style") || "",
+          geometry: parseGeometry(wrapperCell),
+          metadata: {
+            ...(wrapper ? attributesToObject(wrapper, new Set(["label", "value"])) : {}),
+            ...attributesToObject(
+              wrapperCell,
+              new Set(["id", "parent", "source", "target", "vertex", "edge", "style", "value"])
+            ),
+          },
+        };
+      }
+
+      function parseGeometry(cellElement) {
+        const geometryElement = Array.from(cellElement.children).find((child) => child.nodeName === "mxGeometry");
+
+        if (!geometryElement) {
+          return {
+            x: 0,
+            y: 0,
+            width: 140,
+            height: 56,
+            relative: false,
+          };
+        }
+
+        return {
+          x: readNumber(geometryElement.getAttribute("x"), 0),
+          y: readNumber(geometryElement.getAttribute("y"), 0),
+          width: readNumber(geometryElement.getAttribute("width"), 140),
+          height: readNumber(geometryElement.getAttribute("height"), 56),
+          relative: geometryElement.getAttribute("relative") === "1",
+        };
+      }
+
+      function parseXml(text, label) {
+        const doc = new DOMParser().parseFromString(text, "text/xml");
+        const errorNode = doc.querySelector("parsererror");
+        if (errorNode) {
+          throw new Error(`${label} 파싱 실패: ${errorNode.textContent.trim()}`);
+        }
+        return doc;
+      }
+
+      function extractDiagramXml(diagramElement) {
+        const directModel = Array.from(diagramElement.children).find((child) => child.nodeName === "mxGraphModel");
+
+        if (directModel) {
+          return new XMLSerializer().serializeToString(directModel);
+        }
+
+        const content = (diagramElement.textContent || "").trim();
+
+        if (!content) {
+          throw new Error("diagram 안에 mxGraphModel 데이터가 없습니다.");
+        }
+
+        if (content.startsWith("<mxGraphModel")) {
+          return content;
+        }
+
+        return decompressDiagramContent(content);
+      }
+
+      function decompressDiagramContent(content) {
+        try {
+          const binary = atob(content.replace(/\s+/g, ""));
+          const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+          const inflated = window.pako.inflateRaw(bytes, { to: "string" });
+          return decodeURIComponent(inflated);
+        } catch (error) {
+          throw new Error(`draw.io 압축 diagram 해제 실패: ${error.message}`);
+        }
+      }
+
+      function mapDrawioShapeToCytoscape(styleMap) {
+        const shape = (styleMap.shape || "").toLowerCase();
+
+        if (shape.includes("rhombus") || shape.includes("diamond")) {
+          return "diamond";
+        }
+
+        if (shape.includes("ellipse") || shape.includes("circle")) {
+          return "ellipse";
+        }
+
+        if (shape.includes("hexagon")) {
+          return "hexagon";
+        }
+
+        if (styleMap.rounded === "1") {
+          return "round-rectangle";
+        }
+
+        return "rectangle";
+      }
+
+      function parseStyleString(styleString = "") {
+        return styleString.split(";").reduce((accumulator, token) => {
+          if (!token) {
+            return accumulator;
+          }
+          const [key, ...rest] = token.split("=");
+          accumulator[key] = rest.length > 0 ? rest.join("=") : "1";
+          return accumulator;
+        }, {});
+      }
+
+      function applyStyleOverrides(styleString, overrides) {
+        const styleMap = parseStyleString(styleString);
+
+        Object.entries(overrides).forEach(([key, value]) => {
+          styleMap[key] = String(value);
+        });
+
+        return Object.entries(styleMap)
+          .filter(([key]) => key)
+          .map(([key, value]) => `${key}=${value}`)
+          .join(";");
+      }
+
+      function decodeLabel(value) {
+        if (!value) {
+          return "";
+        }
+
+        const html = String(value).replace(/<br\s*\/?>/gi, "\n");
+        const doc = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
+        return (doc.body.textContent || "")
+          .replace(/\u00a0/g, " ")
+          .replace(/[ \t]+\n/g, "\n")
+          .trim();
+      }
+
+      function normalizeDrawioColor(value, fallback) {
+        if (!value || value === "none" || value === "default") {
+          return fallback;
+        }
+
+        if (/^#[0-9a-f]{3,8}$/i.test(value)) {
+          return value;
+        }
+
+        if (/^[0-9a-f]{6}$/i.test(value)) {
+          return `#${value}`;
+        }
+
+        return fallback;
+      }
+
+      function summarizeMetadata(metadata) {
+        return Object.entries(metadata || {})
+          .slice(0, 4)
+          .map(([key, value]) => `${key}: ${value}`)
+          .join(" / ");
+      }
+
+      function attributesToObject(element, exclude = new Set()) {
+        return Array.from(element.attributes).reduce((accumulator, attribute) => {
+          if (!exclude.has(attribute.name)) {
+            accumulator[attribute.name] = attribute.value;
+          }
+          return accumulator;
+        }, {});
+      }
+
+      function isStructuralCell(cell) {
+        return cell.id === "0" || cell.id === "1";
+      }
+
+      function clampNumber(value, min, max) {
+        return Math.max(min, Math.min(max, Number.isFinite(value) ? value : min));
+      }
+
+      function readNumber(value, fallback) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : fallback;
+      }
+
+      function firstNonEmpty(...values) {
+        return values.find((value) => value !== undefined && value !== null && value !== "") || "";
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+    </script>
+  </body>
+</html>
