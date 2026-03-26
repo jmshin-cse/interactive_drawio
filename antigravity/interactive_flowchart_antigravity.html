@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Draw.io Interactive Flow Viewer</title>
+    <!-- Cytoscape.js 코어 라이브러리 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+    <!-- 방향성 그래프 위상정렬 배치를 위한 Dagre 확장 라이브러리 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #1a73e8;
+            --bg-color: #f8f9fa;
+            --panel-bg: #ffffff;
+            --border-color: #dadce0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0; padding: 0;
+            display: flex; height: 100vh;
+            background-color: var(--bg-color);
+            overflow: hidden;
+        }
+
+        /* 좌측 제어 패널 스타일 */
+        #sidebar {
+            width: 350px;
+            background: var(--panel-bg);
+            border-right: 1px solid var(--border-color);
+            padding: 24px;
+            display: flex; flex-direction: column;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+            z-index: 10;
+        }
+
+        h2 { font-size: 1.25rem; margin-top: 0; color: #202124; }
+        p.desc { font-size: 0.9rem; color: #5f6368; line-height: 1.5; margin-bottom: 20px; }
+
+        textarea {
+            flex-grow: 1; resize: none;
+            padding: 12px; border: 1px solid var(--border-color);
+            border-radius: 8px; font-family: monospace; font-size: 0.85rem;
+            outline: none; transition: border-color 0.2s;
+            margin-bottom: 16px; white-space: pre;
+        }
+        textarea:focus { border-color: var(--primary-color); }
+
+        button {
+            background-color: var(--primary-color);
+            color: white; border: none; padding: 14px;
+            border-radius: 8px; font-size: 1rem; font-weight: bold;
+            cursor: pointer; transition: background-color 0.2s;
+        }
+        button:hover { background-color: #1557b0; }
+
+        /* 그래프 렌더링 컨테이너 */
+        #cy-container {
+            flex-grow: 1; position: relative;
+            background-image: radial-gradient(#e0e0e0 1px, transparent 1px);
+            background-size: 20px 20px; /* 도트 UI 패턴 */
+        }
+        #cy { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <h2>Draw.io XML 뷰어</h2>
+        <p class="desc">Draw.io의 XML 데이터를 붙여넣으세요.<br>(압축되지 않은 일반 XML 형식)</p>
+        <textarea id="xmlInput"></textarea>
+        <button id="renderBtn">다이어그램 렌더링</button>
+    </div>
+
+    <div id="cy-container">
+        <div id="cy"></div>
+    </div>
+
+    <script>
+        let cy = null;
+
+        // 예시 XML: 사용자가 보기 쉽도록 처음에 적용시켜둘 샘플 데이터
+        const sampleXML = `
+<mxGraphModel>
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="Start" value="시작" vertex="1" parent="1"></mxCell>
+    <mxCell id="Auth" value="권한 확인" vertex="1" parent="1"></mxCell>
+    <mxCell id="Admin" value="관리자 로직" vertex="1" parent="1"></mxCell>
+    <mxCell id="User" value="일반 유저 로직" vertex="1" parent="1"></mxCell>
+    <mxCell id="DB" value="DB 저장" vertex="1" parent="1"></mxCell>
+    <mxCell id="Email" value="알림 발송" vertex="1" parent="1"></mxCell>
+    <mxCell id="End" value="완료" vertex="1" parent="1"></mxCell>
+    <mxCell id="e1" edge="1" source="Start" target="Auth" parent="1"></mxCell>
+    <mxCell id="e2" edge="1" source="Auth" target="Admin" parent="1"></mxCell>
+    <mxCell id="e3" edge="1" source="Auth" target="User" parent="1"></mxCell>
+    <mxCell id="e4" edge="1" source="Admin" target="DB" parent="1"></mxCell>
+    <mxCell id="e5" edge="1" source="User" target="DB" parent="1"></mxCell>
+    <mxCell id="e6" edge="1" source="DB" target="Email" parent="1"></mxCell>
+    <mxCell id="e7" edge="1" source="Email" target="End" parent="1"></mxCell>
+  </root>
+</mxGraphModel>`;
+        
+        document.getElementById('xmlInput').value = sampleXML.trim();
+
+        // ==========================================
+        // 1. 핵심 로직: Draw.io XML 파싱 알고리즘
+        // ==========================================
+        function parseDrawioXML(xmlString) {
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlString, "text/xml");
+            const cells = xmlDoc.querySelectorAll("mxCell");
+            
+            const elements = [];
+
+            cells.forEach(cell => {
+                const isVertex = cell.getAttribute("vertex") === "1";
+                const isEdge = cell.getAttribute("edge") === "1";
+                const id = cell.getAttribute("id");
+                
+                if (isVertex) {
+                    // Draw.io 텍스트에는 <b>등 HTML이 올 수 있어 태그를 제거
+                    let value = cell.getAttribute("value") || "";
+                    value = value.replace(/<[^>]+>/g, '').trim(); 
+                    if (!value) value = "노드 " + id; 
+
+                    elements.push({
+                        data: { id: id, label: value } // 노드(Vertex) 데이터
+                    });
+                } else if (isEdge) {
+                    const source = cell.getAttribute("source");
+                    const target = cell.getAttribute("target");
+                    
+                    // 시작점과 도착점이 모두 있는 정상적인 화살표만 추가
+                    if (source && target) {
+                        elements.push({
+                            data: { id: id, source: source, target: target } // 엣지(Edge) 데이터
+                        });
+                    }
+                }
+            });
+
+            return elements;
+        }
+
+        // ==========================================
+        // 2. 시각화 렌더링 및 스타일 정의
+        // ==========================================
+        function renderDiagram(elements) {
+            // 메모리 최적화: 기존에 렌더링된 그래프가 있으면 인스턴스 파기
+            if (cy) { cy.destroy(); }
+
+            cy = cytoscape({
+                container: document.getElementById('cy'),
+                elements: elements,
+                
+                // CSS와 유사한 Cytoscape 특수 스타일 시스템
+                style: [
+                    {
+                        selector: 'node',
+                        style: {
+                            'label': 'data(label)',
+                            'background-color': '#fff',
+                            'border-width': 2,
+                            'border-color': '#5f6368',
+                            'color': '#202124',
+                            'font-size': '14px',
+                            'font-weight': '600',
+                            'text-valign': 'center',
+                            'text-halign': 'center',
+                            'shape': 'round-rectangle',
+                            'width': 'label',
+                            'height': 'label',
+                            'padding': '14px',
+                            // 전환 애니메이션
+                            'transition-property': 'background-color, border-color, color, opacity',
+                            'transition-duration': '0.3s'
+                        }
+                    },
+                    {
+                        selector: 'edge',
+                        style: {
+                            'width': 2,
+                            'line-color': '#bdc1c6',
+                            'target-arrow-color': '#bdc1c6',
+                            'target-arrow-shape': 'triangle',
+                            'curve-style': 'bezier',
+                            // 전환 애니메이션
+                            'transition-property': 'line-color, target-arrow-color, width, opacity',
+                            'transition-duration': '0.3s'
+                        }
+                    },
+                    // [버그 수정됨] 노드(박스)가 선택되었을 때의 스타일
+                    {
+                        selector: 'node.highlighted',
+                        style: {
+                            'background-color': '#e8f0fe',
+                            'border-color': '#1a73e8',
+                            'border-width': 3,
+                            'color': '#1a73e8',
+                            'z-index': 10 // 박스가 선 위로 올라오게
+                        }
+                    },
+                    // [버그 수정됨] 엣지(선)가 선택되었을 때의 스타일
+                    {
+                        selector: 'edge.highlighted',
+                        style: {
+                            'line-color': '#1a73e8',
+                            'target-arrow-color': '#1a73e8',
+                            'width': 4, // 굵기는 선에만 영향을 줌
+                            'z-index': 10
+                        }
+                    },
+                    // [상호작용 스타일]: 선택되지 않은 나머지 요소 (투명도 조절로 희미하게)
+                    {
+                        selector: '.dimmed',
+                        style: { opacity: 0.15 }
+                    }
+                ],
+                // 플러그인 레이아웃 엔진 적용 (자동 순서도 정렬)
+                layout: {
+                    name: 'dagre',
+                    rankDir: 'TB', // Top-to-Bottom (위에서 아래로 흐름)
+                    nodeSep: 60,
+                    rankSep: 80,
+                    fit: true,
+                    padding: 50,
+                    animate: true
+                }
+            });
+
+            // ==========================================
+            // 3. 하이라이팅 로직 (선택 노드 기준 Upstream/Downstream 탐색)
+            // ==========================================
+            
+            // 박스(Node)를 클릭했을 때 발생
+            cy.on('tap', 'node', function(evt) {
+                const node = evt.target;
+                
+                // 1) 전체 요소를 Dimmed(희미하게) 상태로 일괄 변경
+                cy.elements().removeClass('highlighted').addClass('dimmed');
+                
+                // 2) Cytoscape에 내장된 BFS/DFS 기반 컬렉션 탐색 사용
+                const upstreamPath = node.predecessors(); 
+                const downstreamPath = node.successors();
+                
+                // 3) 클릭한 노드 본인과 앞뒤로 이어진 경로 요소를 하나의 컬렉션으로 합집합(.union)
+                const connectedElements = node.union(upstreamPath).union(downstreamPath);
+                
+                // 4) 관련된 경로만 희미한 상태(dimmed)를 풀고 강조(highlighted) 클래스 추가
+                connectedElements.removeClass('dimmed').addClass('highlighted');
+            });
+
+            // 그래프의 빈 바탕(Container)을 클릭했을 때 발생
+            cy.on('tap', function(evt) {
+                if (evt.target === cy) {
+                    // 모든 강조/희미화 효과 초기화
+                    cy.elements().removeClass('highlighted dimmed');
+                }
+            });
+        }
+
+        // 초기 실행: 샘플 데이터 렌더링
+        renderDiagram(parseDrawioXML(document.getElementById('xmlInput').value));
+
+        // 버튼 클릭 이벤트: 사용자 입력 XML 파싱 
+        document.getElementById('renderBtn').addEventListener('click', () => {
+            const rawXml = document.getElementById('xmlInput').value;
+            try {
+                const parsedElements = parseDrawioXML(rawXml);
+                if(parsedElements.length === 0) {
+                    alert('노드나 엣지를 찾을 수 없습니다.'); return;
+                }
+                renderDiagram(parsedElements);
+            } catch (error) {
+                alert('잘못된 XML 형식이거나 파싱 중 오류가 발생했습니다.');
+                console.error(error);
+            }
+        });
+    </script>
+</body>
+</html>
+
