@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 모델별 Draw.io 인터랙티브 뷰어 비교</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; background: #f0f2f5; text-align: center; padding: 50px; }
+        h1 { color: #1a1a1a; margin-bottom: 40px; }
+        .card-container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; }
+        .card { 
+            background: white; padding: 30px 40px; border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-decoration: none;
+            color: #333; transition: transform 0.2s, box-shadow 0.2s;
+            width: 200px; border: 1px solid #e1e4e8;
+        }
+        .card:hover { transform: translateY(-5px); box-shadow: 0 10px 15px rgba(0,0,0,0.1); border-color: #1a73e8; }
+        .card h2 { margin: 0 0 10px 0; color: #1a73e8; }
+        .card p { margin: 0; font-size: 14px; color: #666; }
+    </style>
+</head>
+<body>
+
+    <h1>어떤 AI의 구현체를 보시겠습니까? 🤖</h1>
+    
+    <div class="card-container">
+        <!-- 각 폴더로 이동하는 하이퍼링크 -->
+        <a href="antigravity/" class="card">
+            <h2>Antigravity</h2>
+            <p>그래프 이론(Cytoscape.js) 최적화 버전</p>
+        </a>
+        <a href="codex/" class="card">
+            <h2>OpenAI Codex</h2>
+            <p>Codex 모델 구현 버전</p>
+        </a>
+        <a href="claude/" class="card">
+            <h2>Claude 3.5</h2>
+            <p>Claude 모델 구현 버전</p>
+        </a>
+    </div>
+
+</body>
+</html>
