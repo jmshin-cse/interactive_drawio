@@ -494,7 +494,7 @@
           <h1>Connected Path Highlighter</h1>
           <p>
             Draw.io XML을 붙여넣거나 업로드하면 노드/엣지 그래프로 파싱하고, 클릭한
-            노드를 기준으로 연결된 모든 영역을 한 번에 강조합니다.
+            노드를 기준으로 상류/하류 경로만 분리해서 강조합니다.
           </p>
         </section>
 
@@ -541,8 +541,8 @@
             </div>
 
             <p class="help-copy">
-              현재 하이라이트 방식은 <strong>방향성을 무시한 연결 컴포넌트 탐색</strong>입니다.
-              즉, 클릭한 노드와 간접적으로라도 연결된 모든 노드와 엣지를 함께 강조합니다.
+              현재 하이라이트 방식은 <strong>선택 노드 기준 상류/하류 경로 탐색</strong>입니다.
+              즉, 선택 노드로 들어오는 경로와 선택 노드에서 나가는 경로만 따라가며 강조합니다.
             </p>
           </div>
         </section>
@@ -576,12 +576,12 @@
         <section class="panel">
           <div class="panel-head">
             <h2>선택 노드</h2>
-            <span class="tiny-tag">BFS Highlight</span>
+            <span class="tiny-tag">Upstream / Downstream</span>
           </div>
           <div id="selectionInfo" class="detail-list">
             <div class="detail-item">
               <strong>선택 없음</strong>
-              <span>노드를 클릭하면 연결된 전체 영역을 강조하고 통계를 보여줍니다.</span>
+              <span>노드를 클릭하면 상류/하류 경로만 강조하고 통계를 보여줍니다.</span>
             </div>
           </div>
         </section>
@@ -605,8 +605,8 @@
             <h2>작동 방식</h2>
             <p class="help-copy">
               <code>mxCell[vertex="1"]</code>는 노드, <code>mxCell[edge="1"]</code>는 엣지로 읽습니다.
-              그런 다음 인접 리스트를 만들고, 클릭한 노드에서 양방향 BFS를 수행해서
-              연결 컴포넌트 전체를 수집합니다.
+              그런 다음 방향성 인접 리스트를 만들고, 클릭한 노드에서
+              <strong>incoming BFS + outgoing BFS</strong>를 각각 수행해 상류/하류 경로만 수집합니다.
             </p>
           </div>
 
@@ -641,9 +641,9 @@
 
           <div class="canvas-overlay">
             <div class="status-banner">
-              <strong id="bannerTitle">연결 컴포넌트 하이라이트</strong>
+              <strong id="bannerTitle">경로 하이라이트</strong>
               <span id="bannerText">
-                노드를 클릭하면 해당 노드와 연결된 모든 노드/엣지를 강조하고, 나머지는 흐리게 처리합니다.
+                노드를 클릭하면 해당 노드의 상류/하류 경로만 강조하고, 나머지는 흐리게 처리합니다.
               </span>
             </div>
           </div>
@@ -945,7 +945,7 @@
       function bindCyEvents(page) {
         state.cy.on("tap", "node", (event) => {
           const nodeId = event.target.id();
-          highlightConnectedComponent(page, nodeId);
+          highlightDirectionalPaths(page, nodeId);
         });
 
         state.cy.on("tap", (event) => {
@@ -955,8 +955,8 @@
         });
       }
 
-      function highlightConnectedComponent(page, startNodeId) {
-        const component = collectConnectedComponent(page.graph, startNodeId);
+      function highlightDirectionalPaths(page, startNodeId) {
+        const component = collectDirectionalPaths(page.graph, startNodeId);
         const cy = state.cy;
 
         cy.elements().removeClass("is-highlighted is-selected").addClass("is-dimmed");
@@ -978,7 +978,7 @@
 
         ui.bannerTitle.textContent = `선택 노드: ${page.nodeMap.get(startNodeId)?.title || startNodeId}`;
         ui.bannerText.textContent =
-          `연결 노드 ${component.nodeIds.size}개, 연결 엣지 ${component.edgeIds.size}개를 강조했습니다.`;
+          `상류 노드 ${component.upstreamNodeIds.size}개, 하류 노드 ${component.downstreamNodeIds.size}개, 전체 엣지 ${component.edgeIds.size}개를 강조했습니다.`;
       }
 
       function resetHighlight() {
@@ -988,9 +988,9 @@
 
         state.cy.elements().removeClass("is-dimmed is-highlighted is-selected");
         updateSelectionPanel(null);
-        ui.bannerTitle.textContent = "연결 컴포넌트 하이라이트";
+        ui.bannerTitle.textContent = "경로 하이라이트";
         ui.bannerText.textContent =
-          "노드를 클릭하면 해당 노드와 연결된 모든 노드/엣지를 강조하고, 나머지는 흐리게 처리합니다.";
+          "노드를 클릭하면 해당 노드의 상류/하류 경로만 강조하고, 나머지는 흐리게 처리합니다.";
       }
 
       function destroyCy() {
@@ -1028,7 +1028,7 @@
           ui.selectionInfo.innerHTML = `
             <div class="detail-item">
               <strong>선택 없음</strong>
-              <span>노드를 클릭하면 연결된 전체 영역을 강조하고 통계를 보여줍니다.</span>
+              <span>노드를 클릭하면 상류/하류 경로만 강조하고 통계를 보여줍니다.</span>
             </div>
           `;
           return;
@@ -1042,8 +1042,12 @@
             <span>ID: ${escapeHtml(node.id)}</span>
           </div>
           <div class="detail-item">
-            <strong>연결 컴포넌트 크기</strong>
-            <span>노드 ${component.nodeIds.size}개 / 엣지 ${component.edgeIds.size}개</span>
+            <strong>하이라이트 범위</strong>
+            <span>전체 노드 ${component.nodeIds.size}개 / 전체 엣지 ${component.edgeIds.size}개</span>
+          </div>
+          <div class="detail-item">
+            <strong>방향별 통계</strong>
+            <span>상류 노드 ${component.upstreamNodeIds.size}개 / 하류 노드 ${component.downstreamNodeIds.size}개</span>
           </div>
           <div class="detail-item">
             <strong>레이블</strong>
@@ -1255,72 +1259,95 @@
       }
 
       function buildGraph(nodes, edges) {
-        const incoming = new Map();
-        const outgoing = new Map();
-        const undirected = new Map();
-        const edgeIdsByNode = new Map();
+        const incomingNodeIds = new Map();
+        const outgoingNodeIds = new Map();
+        const incomingEdgeIds = new Map();
+        const outgoingEdgeIds = new Map();
 
         nodes.forEach((node) => {
-          incoming.set(node.id, new Set());
-          outgoing.set(node.id, new Set());
-          undirected.set(node.id, new Set());
-          edgeIdsByNode.set(node.id, new Set());
+          incomingNodeIds.set(node.id, new Set());
+          outgoingNodeIds.set(node.id, new Set());
+          incomingEdgeIds.set(node.id, new Set());
+          outgoingEdgeIds.set(node.id, new Set());
         });
 
         edges.forEach((edge) => {
-          outgoing.get(edge.source)?.add(edge.target);
-          incoming.get(edge.target)?.add(edge.source);
-          undirected.get(edge.source)?.add(edge.target);
-          undirected.get(edge.target)?.add(edge.source);
-          edgeIdsByNode.get(edge.source)?.add(edge.id);
-          edgeIdsByNode.get(edge.target)?.add(edge.id);
+          outgoingNodeIds.get(edge.source)?.add(edge.target);
+          incomingNodeIds.get(edge.target)?.add(edge.source);
+          outgoingEdgeIds.get(edge.source)?.add(edge.id);
+          incomingEdgeIds.get(edge.target)?.add(edge.id);
         });
 
         return {
-          incoming,
-          outgoing,
-          undirected,
-          edgeIdsByNode,
+          incomingNodeIds,
+          outgoingNodeIds,
+          incomingEdgeIds,
+          outgoingEdgeIds,
         };
       }
 
-      function collectConnectedComponent(graph, startNodeId) {
+      function collectDirectionalPaths(graph, startNodeId) {
+        const upstream = traverseDirection(graph, startNodeId, {
+          neighborMap: graph.incomingNodeIds,
+          edgeMap: graph.incomingEdgeIds,
+        });
+        const downstream = traverseDirection(graph, startNodeId, {
+          neighborMap: graph.outgoingNodeIds,
+          edgeMap: graph.outgoingEdgeIds,
+        });
+        const nodeIds = new Set([startNodeId, ...upstream.nodeIds, ...downstream.nodeIds]);
+        const edgeIds = new Set([...upstream.edgeIds, ...downstream.edgeIds]);
+
+        return {
+          nodeIds,
+          edgeIds,
+          upstreamNodeIds: upstream.nodeIds,
+          downstreamNodeIds: downstream.nodeIds,
+          upstreamEdgeIds: upstream.edgeIds,
+          downstreamEdgeIds: downstream.edgeIds,
+        };
+      }
+
+      function traverseDirection(graph, startNodeId, { neighborMap, edgeMap }) {
+        const visited = new Set([startNodeId]);
         const nodeIds = new Set();
         const edgeIds = new Set();
         const queue = [startNodeId];
-        nodeIds.add(startNodeId);
 
         /*
           핵심 하이라이트 알고리즘
 
-          1. 클릭한 노드를 큐에 넣고 시작한다.
-          2. 현재 노드와 연결된 모든 엣지를 먼저 수집한다.
-          3. 방향을 따지지 않는 인접 리스트(undirected)를 사용해 이웃 노드를 찾는다.
-          4. 아직 방문하지 않은 이웃을 큐에 넣는다.
-          5. 큐가 빌 때까지 반복하면, 클릭 노드가 속한 "연결 컴포넌트 전체"를 얻는다.
+          1. startNodeId를 시작점으로 잡고, 한 방향의 인접 리스트만 본다.
+          2. upstream 탐색이면 incoming만, downstream 탐색이면 outgoing만 따라간다.
+          3. 현재 노드에서 같은 방향으로 이어지는 edge id를 수집한다.
+          4. 아직 방문하지 않은 다음 노드를 큐에 넣고 계속 진행한다.
 
-          즉 이 로직은 upstream/downstream을 따로 나누지 않고,
-          Draw.io 흐름도 상에서 클릭 노드와 선으로 이어진 모든 영역을 한 번에 하이라이트한다.
+          이렇게 하면 "선택 노드를 중심으로 한 상류/하류 경로"만 남고,
+          선택 노드를 거치지 않는 옆 가지나 약한 연결 때문에 전체가 선택되는 문제를 막을 수 있다.
         */
         while (queue.length > 0) {
           const currentNodeId = queue.shift();
-          const attachedEdges = graph.edgeIdsByNode.get(currentNodeId) || new Set();
+          const attachedEdges = edgeMap.get(currentNodeId) || new Set();
 
           attachedEdges.forEach((edgeId) => edgeIds.add(edgeId));
 
-          const neighbors = graph.undirected.get(currentNodeId) || new Set();
+          const neighbors = neighborMap.get(currentNodeId) || new Set();
 
           neighbors.forEach((neighborId) => {
-            if (nodeIds.has(neighborId)) {
+            if (visited.has(neighborId)) {
               return;
             }
 
+            visited.add(neighborId);
             nodeIds.add(neighborId);
             queue.push(neighborId);
           });
         }
 
-        return { nodeIds, edgeIds };
+        return {
+          nodeIds,
+          edgeIds,
+        };
       }
 
       function normalizeCellElement(element) {
