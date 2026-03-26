@@ -1,0 +1,90 @@
+<mxGraphModel dx="1400" dy="1400" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+  <root>
+    <mxCell id="0" />
+    <mxCell id="1" parent="0" />
+    
+    <mxCell id="ext_users" value="Global Users (Web/App)" vertex="1" parent="1"><mxGeometry x="20" y="450" width="140" height="70" as="geometry" /></mxCell>
+    <mxCell id="ext_partners" value="Partner APIs (B2B)" vertex="1" parent="1"><mxGeometry x="20" y="550" width="140" height="70" as="geometry" /></mxCell>
+    <mxCell id="glb" value="Global Load Balancer (Route53)" vertex="1" parent="1"><mxGeometry x="220" y="500" width="140" height="70" as="geometry" /></mxCell>
+    <mxCell id="cdn_static" value="CDN (Static Assets)" vertex="1" parent="1"><mxGeometry x="400" y="350" width="120" height="60" as="geometry" /></mxCell>
+    <mxCell id="waf_edge" value="WAF / DDoS Protection" vertex="1" parent="1"><mxGeometry x="400" y="500" width="120" height="60" as="geometry" /></mxCell>
+    <mxCell id="api_gw_core" value="Main API Gateway (Kong)" vertex="1" parent="1"><mxGeometry x="580" y="500" width="140" height="70" as="geometry" /></mxCell>
+    
+    <mxCell id="svc_auth" value="Identity &amp; Auth Service" vertex="1" parent="1"><mxGeometry x="800" y="200" width="130" height="60" as="geometry" /></mxCell>
+    <mxCell id="svc_user_profile" value="User Profile Svc" vertex="1" parent="1"><mxGeometry x="800" y="300" width="130" height="60" as="geometry" /></mxCell>
+    <mxCell id="svc_account" value="Account Service (Ledger)" vertex="1" parent="1"><mxGeometry x="800" y="400" width="130" height="60" as="geometry" /></mxCell>
+    <mxCell id="svc_transaction" value="Transaction Core" vertex="1" parent="1"><mxGeometry x="800" y="500" width="130" height="60" as="geometry" /></mxCell>
+    <mxCell id="svc_payment_gw" value="Payment GW Adaptor" vertex="1" parent="1"><mxGeometry x="800" y="600" width="130" height="60" as="geometry" /></mxCell>
+    <mxCell id="svc_forex" value="Forex (FX) Rate Service" vertex="1" parent="1"><mxGeometry x="800" y="700" width="130" height="60" as="geometry" /></mxCell>
+    
+    <mxCell id="svc_risk_engine" value="Real-time Risk Engine" vertex="1" parent="1"><mxGeometry x="1050" y="450" width="130" height="60" as="geometry" /></mxCell>
+    <mxCell id="svc_fraud_det" value="Fraud Detection (ML)" vertex="1" parent="1"><mxGeometry x="1050" y="550" width="130" height="60" as="geometry" /></mxCell>
+    <mxCell id="svc_noti_hub" value="Notification Hub" vertex="1" parent="1"><mxGeometry x="1050" y="750" width="130" height="60" as="geometry" /></mxCell>
+    <mxCell id="svc_audit_log" value="Immutable Audit Log" vertex="1" parent="1"><mxGeometry x="1050" y="250" width="130" height="60" as="geometry" /></mxCell>
+    
+    <mxCell id="kafka_cluster" value="Kafka Event Bus (9 Nodes)" vertex="1" parent="1"><mxGeometry x="1300" y="500" width="180" height="80" as="geometry" /></mxCell>
+    <mxCell id="redis_cache_global" value="Global Redis Cluster" vertex="1" parent="1"><mxGeometry x="1050" y="100" width="130" height="60" as="geometry" /></mxCell>
+    <mxCell id="db_user_mysql" value="User DB (MySQL Sharded)" vertex="1" parent="1"><mxGeometry x="1050" y="350" width="130" height="60" as="geometry" /></mxCell>
+    <mxCell id="db_ledger_postgre" value="Ledger DB (PostgreSQL)" vertex="1" parent="1"><mxGeometry x="800" y="850" width="130" height="60" as="geometry" /></mxCell>
+    <mxCell id="db_tx_cassandra" value="Tx History (Cassandra)" vertex="1" parent="1"><mxGeometry x="1050" y="650" width="130" height="60" as="geometry" /></mxCell>
+    
+    <mxCell id="ext_bank_us" value="US Federal Reserve Adaptor" vertex="1" parent="1"><mxGeometry x="580" y="750" width="140" height="70" as="geometry" /></mxCell>
+    <mxCell id="ext_bank_eu" value="ECBadaptor (SEPA)" vertex="1" parent="1"><mxGeometry x="580" y="850" width="140" height="70" as="geometry" /></mxCell>
+    <mxCell id="ext_visa_master" value="Visa/MasterCard Network" vertex="1" parent="1"><mxGeometry x="580" y="650" width="140" height="70" as="geometry" /></mxCell>
+
+    <mxCell id="spark_streaming" value="Spark Streaming Analytics" vertex="1" parent="1"><mxGeometry x="1550" y="450" width="140" height="70" as="geometry" /></mxCell>
+    <mxCell id="aml_compliance" value="AML Compliance Checker" vertex="1" parent="1"><mxGeometry x="1550" y="550" width="140" height="70" as="geometry" /></mxCell>
+    <mxCell id="s3_data_lake" value="Data Lake (S3)" vertex="1" parent="1"><mxGeometry x="1750" y="500" width="120" height="60" as="geometry" /></mxCell>
+
+    <mxCell id="e1" edge="1" parent="1" source="ext_users" target="glb"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e2" edge="1" parent="1" source="ext_partners" target="glb"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e3" edge="1" parent="1" source="glb" target="cdn_static"><mxGeometry relative="1" as="geometry"><mxPoint as="offset" /></mxGeometry></mxCell>
+    <mxCell id="e4" edge="1" parent="1" source="glb" target="waf_edge"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e5" edge="1" parent="1" source="waf_edge" target="api_gw_core"><mxGeometry relative="1" as="geometry" /></mxCell>
+    
+    <mxCell id="e6" edge="1" parent="1" source="api_gw_core" target="svc_auth"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e7" edge="1" parent="1" source="api_gw_core" target="svc_user_profile"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e8" edge="1" parent="1" source="api_gw_core" target="svc_account"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e9" edge="1" parent="1" source="api_gw_core" target="svc_transaction"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e10" edge="1" parent="1" source="api_gw_core" target="svc_payment_gw"><mxGeometry relative="1" as="geometry" /></mxCell>
+    
+    <mxCell id="e11" edge="1" parent="1" source="svc_transaction" target="svc_auth"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e12" edge="1" parent="1" source="svc_transaction" target="svc_account"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e13" edge="1" parent="1" source="svc_transaction" target="svc_risk_engine"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e14" edge="1" parent="1" source="svc_transaction" target="svc_forex"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e15" edge="1" parent="1" source="svc_payment_gw" target="svc_risk_engine"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e16" edge="1" parent="1" source="svc_payment_gw" target="ext_visa_master"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e17" edge="1" parent="1" source="svc_account" target="ext_bank_us"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e18" edge="1" parent="1" source="svc_account" target="ext_bank_eu"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e19" edge="1" parent="1" source="svc_auth" target="svc_user_profile"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e20" edge="1" parent="1" source="svc_risk_engine" target="svc_fraud_det"><mxGeometry relative="1" as="geometry" /></mxCell>
+    
+    <mxCell id="e21" edge="1" parent="1" source="svc_auth" target="redis_cache_global"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e22" edge="1" parent="1" source="svc_auth" target="db_user_mysql"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e23" edge="1" parent="1" source="svc_user_profile" target="db_user_mysql"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e24" edge="1" parent="1" source="svc_account" target="db_ledger_postgre"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e25" edge="1" parent="1" source="svc_transaction" target="db_tx_cassandra"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e26" edge="1" parent="1" source="svc_forex" target="redis_cache_global"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e27" edge="1" parent="1" source="svc_fraud_det" target="db_tx_cassandra"><mxGeometry relative="1" as="geometry" /></mxCell>
+    
+    <mxCell id="e28" edge="1" parent="1" source="svc_transaction" target="kafka_cluster"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e29" edge="1" parent="1" source="svc_account" target="kafka_cluster"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e30" edge="1" parent="1" source="svc_auth" target="kafka_cluster"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e31" edge="1" parent="1" source="svc_payment_gw" target="kafka_cluster"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e32" edge="1" parent="1" source="svc_risk_engine" target="kafka_cluster"><mxGeometry relative="1" as="geometry" /></mxCell>
+    
+    <mxCell id="e33" edge="1" parent="1" source="kafka_cluster" target="svc_noti_hub"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e34" edge="1" parent="1" source="kafka_cluster" target="svc_audit_log"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e35" edge="1" parent="1" source="kafka_cluster" target="spark_streaming"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e36" edge="1" parent="1" source="kafka_cluster" target="aml_compliance"><mxGeometry relative="1" as="geometry" /></mxCell>
+    
+    <mxCell id="e37" edge="1" parent="1" source="svc_audit_log" target="db_ledger_postgre"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e38" edge="1" parent="1" source="svc_fraud_det" target="redis_cache_global"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e39" edge="1" parent="1" source="cdn_static" target="waf_edge"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e40" edge="1" parent="1" source="svc_transaction" target="svc_user_profile"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="e41" edge="1" parent="1" source="svc_noti_hub" target="svc_user_profile"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+    <mxCell id="e42" edge="1" parent="1" source="spark_streaming" target="s3_data_lake"><mxGeometry relative="1" as="geometry" /></mxCell>
+    <mxCell id="eAML" edge="1" parent="1" source="aml_compliance" target="s3_data_lake"><mxGeometry relative="1" as="geometry" /></mxCell>
+  </root>
+</mxGraphModel>
